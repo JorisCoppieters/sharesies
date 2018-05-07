@@ -1,0 +1,31 @@
+{
+  "name": "sharesies",
+  "version": "1.0.0",
+  "description": "A tool for recommending sharesies investments",
+  "main": "invest.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JorisCoppieters/sharesies.git"
+  },
+  "keywords": [
+    "sharesies"
+  ],
+  "author": "Joris Coppieters",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JorisCoppieters/sharesies/issues"
+  },
+  "homepage": "https://github.com/JorisCoppieters/sharesies#readme",
+  "dependencies": {
+    "bluebird": "^3.5.1",
+    "color-print": "^1.0.2",
+    "deasync": "^0.1.12",
+    "request": "^2.85.0"
+  }
+}

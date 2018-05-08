@@ -8,8 +8,6 @@
 
 const Promise = require('bluebird');
 const cprint = require('color-print');
-// const fs = require('fs');
-// const vega = require('vega');
 
 require('./lib/date');
 const config = require('./lib/config');
@@ -22,7 +20,6 @@ const sync = require('./lib/sync');
 // Constants:
 // ******************************
 
-// const DAYS_AGO = 120;
 const INVESTMENT_AMOUNT = 1000;
 const BUY_SCORE_THRESHOLD = 0.5;
 const AUTO_SELL_SCORE_THRESHOLD = -0.1;
@@ -73,9 +70,6 @@ sync.runGenerator(function*() {
     print.heading('buy');
     sortedFundsByBuy
         .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
-
-    // drawSellingChart(sortedFundsBySell, marketPricesNormalized);
-    // drawBuyingChart(sortedFundsByBuy, marketPricesNormalized);
 
     let sharesiesInfo = yield sharesies.getInfo();
     let walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
@@ -288,109 +282,5 @@ function getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds) {
         totalValue: amount
     };
 }
-
-// ******************************
-
-// function drawBuyingChart(sortedFundsByBuy, marketPricesNormalized) {
-//     let chartData = [{
-//         'name': 'table',
-//         'values': []
-//             .concat([{
-//                 'name': 'market',
-//                 'values': marketPricesNormalized
-//             }])
-//             .concat(sortedFundsByBuy
-//                 .map(fundInfo => {
-//                     return {
-//                         'name': fundInfo.fund.code,
-//                         'values': fundInfo.info.fundPricesNormalized
-//                     };
-//                 })
-//             )
-//             .map((fundData) => {
-//                 return fundData.values
-//                     .reverse()
-//                     .filter((price, priceIdx) => priceIdx < DAYS_AGO)
-//                     .reverse()
-//                     .map((price, priceIdx) => {
-//                         return {
-//                             x: priceIdx,
-//                             y: price,
-//                             c: fundData.name
-//                         };
-//                     });
-//             })
-//             .reduce((chartDataValuesArray, chartDataValueGroup) => {
-//                 chartDataValuesArray = chartDataValuesArray.concat(chartDataValueGroup);
-//                 return chartDataValuesArray;
-//             }, [])
-//     }];
-
-//     drawLineChart(chartData, 'line-chart-buy');
-// }
-
-// ******************************
-
-// function drawSellingChart(sortedFundsBySell, marketPricesNormalized) {
-//     let chartData = [{
-//         'name': 'table',
-//         'values': []
-//             .concat([{
-//                 'name': 'market',
-//                 'values': marketPricesNormalized
-//             }])
-//             .concat(sortedFundsBySell
-//                 .map(fundInfo => {
-//                     return {
-//                         'name': fundInfo.fund.code,
-//                         'values': fundInfo.info.fundPricesNormalized
-//                     };
-//                 })
-//             )
-//             .map((fundData) => {
-//                 return fundData.values
-//                     .reverse()
-//                     .filter((price, priceIdx) => priceIdx < DAYS_AGO)
-//                     .reverse()
-//                     .map((price, priceIdx) => {
-//                         return {
-//                             x: priceIdx,
-//                             y: price,
-//                             c: fundData.name
-//                         };
-//                     });
-//             })
-//             .reduce((chartDataValuesArray, chartDataValueGroup) => {
-//                 chartDataValuesArray = chartDataValuesArray.concat(chartDataValueGroup);
-//                 return chartDataValuesArray;
-//             }, [])
-//     }];
-
-//     drawLineChart(chartData, 'line-chart-sell');
-// }
-
-// ******************************
-
-// function drawLineChart(chartData, chartName) {
-//     let lineChart = require('./line-chart.json');
-//     lineChart.data = chartData;
-
-//     let view = new vega.View(vega.parse(lineChart))
-//         .logLevel(vega.warn)
-//         .renderer('none')
-//         .initialize();
-
-//     view
-//         .toCanvas()
-//         .then(canvas => {
-//             fs.writeFileSync(chartName + '.png', canvas.toBuffer());
-//         })
-//         .catch(err => {
-//             process.stderr.write(err + '\n');
-//         });
-
-//     view.finalize();
-//     view = null;
-// }
 
 // ******************************

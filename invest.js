@@ -145,7 +145,7 @@ sync.runGenerator(function*() {
     let sharesiesStats = yield sharesies.getStats();
     let sharesiesTransactions = yield sharesies.getTransactions();
 
-    let startDate = new Date('2018-02-18');
+    let startDate = new Date('2018-02-18'); // TODO make relative for everyone
     let now = new Date();
     let daysSinceStart = parseInt((now - startDate) / (24 * 3600 * 1000));
     let totalReturnsPerDay = parseFloat(sharesiesStats.total_returns_dollars) / daysSinceStart;

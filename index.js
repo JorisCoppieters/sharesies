@@ -29,6 +29,9 @@ const DISTRIBUTION_MAGNITUDE = 3;
 // ******************************
 
 sync.runGenerator(function*() {
+    print.heading('sharesies');
+    cprint.cyan('Loading...');
+
     if (!config.get('username')) {
         config.set('username', readline.sync('Please enter your username: '));
     }
@@ -62,6 +65,7 @@ sync.runGenerator(function*() {
     let sortedFundsBySell = sortedFunds
         .filter(fundInfo => fundInfo.info.score < BUY_SCORE_THRESHOLD);
 
+    print.line();
     print.heading('sell');
     sortedFundsBySell
         .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
@@ -75,7 +79,7 @@ sync.runGenerator(function*() {
     let walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
 
     print.line();
-    print.heading('buying strategy');
+    print.heading('buying actions');
 
     let totalScore = sortedFundsByBuy.reduce((scoreSum, fundInfo) => scoreSum + fundInfo.info.score, 0);
     let adjustedFundsDistribution = sortedFundsByBuy
@@ -102,7 +106,7 @@ sync.runGenerator(function*() {
         });
 
     print.line();
-    print.heading('selling strategy');
+    print.heading('selling actions');
 
     let portfolioFundIds = sharesiesInfo.funds.map(fund => fund.fund_id);
     let sharesAmountByFundId = sharesiesInfo.funds.reduce((dict, fund) => {
@@ -139,37 +143,23 @@ sync.runGenerator(function*() {
     let sharesiesStats = yield sharesies.getStats();
     let sharesiesTransactions = yield sharesies.getTransactions();
 
-    let startDate = new Date('2018-02-18'); // TODO make relative for everyone
-    let now = new Date();
-    let daysSinceStart = parseInt((now - startDate) / (24 * 3600 * 1000));
-    let totalReturnsPerDay = parseFloat(sharesiesStats.total_returns_dollars) / daysSinceStart;
+    let daysAgo = 14;
 
-    let maxInvestmentStrategy = getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds);
-    let maxInvestmentTotal = maxInvestmentStrategy.totalValue;
-    let maxInvestmentFundCodes = maxInvestmentStrategy.bestFunds
+    let maxInvestmentStrategy = getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo);
+    let maxInvestmentReturn = maxInvestmentStrategy.totalReturn;
+    let maxInvestmentFundCodes = maxInvestmentStrategy.funds
         .filter(fund => fund.code !== 'NONE')
         .filter((fund, idx) => idx < 3)
         .map(fund => fund.code + 'x' + fund.count).join(', ');
 
-    let investmentHistory = getInvestmentHistory(sharesiesTransactions, sortedFunds);
-    let investmentFundCodesTally = investmentHistory
-        .map(entry => entry.fund.info.code)
-        .reduce((tally, entry) => {
-            tally[entry] = (tally[entry] || 0) + 1;
-            return tally;
-        }, {});
-
-    let investmentFundCodes = Object.keys(investmentFundCodesTally)
-        .map(fundCode => {
-            return {
-                code: fundCode,
-                count: investmentFundCodesTally[fundCode]
-            };
-        })
-        .sort((a,b) => b.count - a.count)
+    let investmentStrategy = getInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo);
+    let investmentReturn = investmentStrategy.totalReturn;
+    let investmentFundCodes = investmentStrategy.funds
+        .filter(fund => fund.code !== 'NONE')
+        .filter((fund, idx) => idx < 3)
         .map(fund => fund.code + 'x' + fund.count).join(', ');
 
-
+    let totalReturnsPerDay = parseFloat(investmentReturn) / daysAgo;
 
     let isWin = process.platform === 'win32';
     let lightGreenFn = cprint.toLightGreen;
@@ -190,40 +180,122 @@ sync.runGenerator(function*() {
     print.line();
     print.info(`Total Deposits: ${cprint.toGreen('$' + parseFloat(sharesiesStats.total_deposits).toFixed(2))}`);
     print.info(`Total Withdrawals: ${cprint.toRed('$' + parseFloat(sharesiesStats.total_withdrawals).toFixed(2))}`);
+    print.info(`Total Value: ${lightGreenFn('$' + parseFloat(sharesiesStats.total_portfolio).toFixed(2))}`);
     print.line();
-    print.info(`Max Total Value: ${cprint.toGreen('$' + maxInvestmentTotal.toFixed(2))} ${lightBlueFn('=> ' + maxInvestmentFundCodes)}`);
-    print.line();
-    print.info(`Total Value: ${lightGreenFn('$' + parseFloat(sharesiesStats.total_portfolio).toFixed(2))} ${lightBlueFn('=> ' + investmentFundCodes)}`);
-    print.line();
-    print.info(`Total Return: ${lightGreenFn('$' + parseFloat(sharesiesStats.total_returns_dollars).toFixed(2))} ${lightBlueFn('($' + parseFloat(totalReturnsPerDay).toFixed(2) + ' per day)')}`);
+    print.heading('strategy (last 2 weeks)');
+    print.info(`Max Return: ${lightGreenFn('$' + maxInvestmentReturn.toFixed(2))} ${lightBlueFn('=> ' + maxInvestmentFundCodes)}`);
+    print.info(`Total Return: ${lightGreenFn('$' + investmentReturn.toFixed(2))} ${lightBlueFn('=> ' + investmentFundCodes)}`);
+    print.info(`Return per Day: ${lightGreenFn('$' + parseFloat(totalReturnsPerDay).toFixed(2))}`);
 });
 
 // ******************************
 
-function getInvestmentHistory(sharesiesTransactions, sortedFunds) {
-    return sharesiesTransactions
-        .filter(transaction => transaction.description === 'Fund purchase')
-        .map(transaction => {
-            return {
-                'amount': transaction.buy_order.requested_nzd_amount,
-                'fund': sortedFunds.find(sortedFund => sortedFund.fund.id === transaction.buy_order.fund_id)
-            };
-        })
-        .filter(entry => entry.fund);
+function getInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo) {
+    let startDate = new Date('2018-01-01');
+    let now = new Date();
+    let daysSinceBeginning = parseInt((now - startDate) / (24 * 3600 * 1000));
+
+    let fundHistoryDays = sortedFunds[0].info.fundPrices.length;
+
+    let fundAmount = {};
+    let fundsUsed = {};
+    let totalReturn = 0;
+
+    for (let dayIdx = 0; dayIdx <= daysSinceBeginning; dayIdx++) {
+        let dateAtIdx = new Date(startDate.getTime() + (dayIdx * 24 * 3600 * 1000));
+        let dateStampAtIdx = dateAtIdx.toDateStamp();
+
+        sharesiesTransactions
+            .filter(transaction => transaction.buy_order)
+            .map(transaction => {
+                return {
+                    'amount': parseFloat(transaction.amount),
+                    'fundCode': sortedFunds
+                        .filter(sortedFund => sortedFund.fund.id === transaction.buy_order.fund_id)
+                        .map(sortedFund => sortedFund.fund.code)[0] || transaction.buy_order.fund_id,
+                    'dateStamp': new Date(transaction.timestamp.$quantum).toDateStamp()
+                };
+            })
+            .filter(transaction => transaction.dateStamp === dateStampAtIdx)
+            .forEach(transaction => {
+                fundAmount[transaction.fundCode] = fundAmount[transaction.fundCode] || 0;
+                fundAmount[transaction.fundCode] += -transaction.amount;
+            });
+
+        sharesiesTransactions
+            .filter(transaction => transaction.sell_order)
+            .map(transaction => {
+                return {
+                    'amount': parseFloat(transaction.amount),
+                    'fundCode': sortedFunds
+                        .filter(sortedFund => sortedFund.fund.id === transaction.sell_order.fund_id)
+                        .map(sortedFund => sortedFund.fund.code)[0] || transaction.sell_order.fund_id,
+                    'dateStamp': new Date(transaction.timestamp.$quantum).toDateStamp()
+                };
+            })
+            .filter(transaction => transaction.dateStamp === dateStampAtIdx)
+            .forEach(transaction => {
+                fundAmount[transaction.fundCode] = fundAmount[transaction.fundCode] || 0;
+                fundAmount[transaction.fundCode] += -transaction.amount;
+            });
+
+        let fundDayIdx = dayIdx + (fundHistoryDays - daysSinceBeginning - 1);
+
+        let maxReturn = 0;
+        let maxFundCode = 'NONE';
+
+        sortedFunds
+            .forEach(sortedFund => {
+                fundAmount[sortedFund.fund.code] = fundAmount[sortedFund.fund.code] || 0;
+                let fundMultiplierAtIdx = (sortedFund.info.fundPrices[fundDayIdx + 1] / sortedFund.info.fundPrices[fundDayIdx]) || 1;
+                let before = fundAmount[sortedFund.fund.code];
+                let after = before * fundMultiplierAtIdx;
+                let fundReturn = (after - before);
+
+                fundAmount[sortedFund.fund.code] = after;
+
+                if (dayIdx >= daysSinceBeginning - daysAgo) {
+                    totalReturn += fundReturn;
+                    if (fundReturn > maxReturn) {
+                        maxReturn = fundMultiplierAtIdx;
+                        maxFundCode = sortedFund.fund.code;
+                    }
+                }
+            });
+
+        if (dayIdx >= daysSinceBeginning - daysAgo) {
+            fundsUsed[maxFundCode] = (fundsUsed[maxFundCode] || 0) + 1;
+        }
+    }
+
+    return {
+        funds: Object.keys(fundsUsed)
+            .map(bestFundCode => {
+                return {
+                    code: bestFundCode,
+                    count: fundsUsed[bestFundCode]
+                };
+            })
+            .sort((a,b) => b.count - a.count),
+        totalValue: 0,
+        totalReturn: totalReturn
+    };
 }
 
 // ******************************
 
-function getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds) {
+function getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo) {
     let startDate = new Date('2018-01-01');
     let now = new Date();
-    let daysSinceStart = parseInt((now - startDate) / (24 * 3600 * 1000));
+    let daysSinceBeginning = parseInt((now - startDate) / (24 * 3600 * 1000));
 
-    let numDaysAgo = sortedFunds[0].info.fundPrices.length;
-    let amount = 0;
+    let fundHistoryDays = sortedFunds[0].info.fundPrices.length;
     let investmentPeriod = 5;
 
-    let bestFunds = [];
+    let totalReturn = 0;
+    let totalValue = 0;
+
+    let fundsUsed = [];
 
     let deposits = sharesiesTransactions
         .filter(transaction => transaction.description === 'Deposit' || transaction.description === 'Welcome gift')
@@ -234,7 +306,16 @@ function getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds) {
             };
         });
 
-    for (let dayIdx = 0; dayIdx <= daysSinceStart; dayIdx++) {
+    let withdrawals = sharesiesTransactions
+        .filter(transaction => transaction.description === 'Withdrawal')
+        .map(transaction => {
+            return {
+                'amount': parseFloat(transaction.amount),
+                'dateStamp': new Date(transaction.timestamp.$quantum).toDateStamp()
+            };
+        });
+
+    for (let dayIdx = 0; dayIdx <= daysSinceBeginning; dayIdx++) {
 
         let dateAtIdx = new Date(startDate.getTime() + (dayIdx * 24 * 3600 * 1000));
         let dateStampAtIdx = dateAtIdx.toDateStamp();
@@ -243,13 +324,17 @@ function getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds) {
             .filter(deposit => deposit.dateStamp == dateStampAtIdx)
             .reduce((total, transaction) => total + transaction.amount, 0);
 
-        amount += deposit;
+        let withdrawal = withdrawals
+            .filter(withdrawal => withdrawal.dateStamp == dateStampAtIdx)
+            .reduce((total, transaction) => total + transaction.amount, 0);
+
+        totalValue += (deposit - withdrawal);
 
         if (dayIdx % investmentPeriod !== 0) {
             continue;
         }
 
-        let fundDayIdx = dayIdx + (numDaysAgo - daysSinceStart);
+        let fundDayIdx = dayIdx + (fundHistoryDays - daysSinceBeginning);
         let maxFund = sortedFunds
             .map(sortedFund => {
                 return {
@@ -266,20 +351,28 @@ function getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds) {
             .reverse()
             .sort((a, b) => b.fundMultiplierAtIdx - a.fundMultiplierAtIdx)[0];
 
-        amount *= maxFund.fundMultiplierAtIdx;
-        bestFunds[maxFund.fundCode] = (bestFunds[maxFund.fundCode] || 0) + 1;
+
+        let before = totalValue;
+        let after = before * maxFund.fundMultiplierAtIdx;
+        let maxFundReturn = after - before;
+
+        if (dayIdx >= daysSinceBeginning - daysAgo) {
+            totalReturn += maxFundReturn;
+            fundsUsed[maxFund.fundCode] = (fundsUsed[maxFund.fundCode] || 0) + 1;
+        }
+        totalValue = after;
     }
 
     return {
-        bestFunds: Object.keys(bestFunds)
+        funds: Object.keys(fundsUsed)
             .map(bestFundCode => {
                 return {
                     code: bestFundCode,
-                    count: bestFunds[bestFundCode]
+                    count: fundsUsed[bestFundCode]
                 };
             })
             .sort((a,b) => b.count - a.count),
-        totalValue: amount
+        totalReturn: totalReturn
     };
 }
 

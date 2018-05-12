@@ -1,4 +1,4 @@
-# servicerator
+# sharesies
 
 sharesies is a Node utility for recommending which funds to invest/sell for Sharesies
 

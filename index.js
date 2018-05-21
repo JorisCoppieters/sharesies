@@ -22,7 +22,7 @@ const sync = require('./lib/sync');
 
 const INVESTMENT_AMOUNT = 1000;
 const BUY_SCORE_THRESHOLD = 0.5;
-const AUTO_SELL_SCORE_THRESHOLD = -0.1;
+const AUTO_SELL_SCORE_THRESHOLD = -10;//-0.1;
 const MIN_FUND_ALOCATION = 5;
 const DISTRIBUTION_MAGNITUDE = 3;
 

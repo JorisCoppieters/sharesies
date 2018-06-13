@@ -1,6 +1,6 @@
 {
   "name": "sharesies",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "A tool for recommending sharesies investments",
   "main": "index.js",
   "bin": {

@@ -66,12 +66,12 @@ sync.runGenerator(function*() {
         .filter(fundInfo => fundInfo.info.score < BUY_SCORE_THRESHOLD);
 
     print.line();
-    print.heading('sell');
+    print.heading('sell scores');
     sortedFundsBySell
         .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
 
     print.line();
-    print.heading('buy');
+    print.heading('buy scores');
     sortedFundsByBuy
         .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
 
@@ -79,7 +79,7 @@ sync.runGenerator(function*() {
     let walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
 
     print.line();
-    print.heading('buying actions');
+    print.heading('actions for buying');
 
     let totalScore = sortedFundsByBuy.reduce((scoreSum, fundInfo) => scoreSum + fundInfo.info.score, 0);
     let adjustedFundsDistribution = sortedFundsByBuy
@@ -106,7 +106,7 @@ sync.runGenerator(function*() {
         });
 
     print.line();
-    print.heading('selling actions');
+    print.heading('actions for selling');
 
     let portfolioFundIds = sharesiesInfo.funds.map(fund => fund.fund_id);
     let sharesAmountByFundId = sharesiesInfo.funds.reduce((dict, fund) => {
@@ -182,7 +182,7 @@ sync.runGenerator(function*() {
     print.info(`Total Withdrawals: ${cprint.toRed('$' + parseFloat(sharesiesStats.total_withdrawals).toFixed(2))}`);
     print.info(`Total Value: ${lightGreenFn('$' + parseFloat(sharesiesStats.total_portfolio).toFixed(2))}`);
     print.line();
-    print.heading('strategy (last 2 weeks)');
+    print.heading('investment strategy (last 2 weeks)');
     print.info(`Max Return: ${lightGreenFn('$' + maxInvestmentReturn.toFixed(2))} ${lightBlueFn('=> ' + maxInvestmentFundCodes)}`);
     print.info(`Total Return: ${lightGreenFn('$' + investmentReturn.toFixed(2))} ${lightBlueFn('=> ' + investmentFundCodes)}`);
     print.info(`Return per Day: ${lightGreenFn('$' + parseFloat(totalReturnsPerDay).toFixed(2))}`);

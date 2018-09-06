@@ -172,6 +172,8 @@ sync.runGenerator(function*() {
         lightBlueFn = cprint.toGreen;
     }
 
+    let totalReturn = parseFloat(sharesiesStats.total_portfolio) + parseFloat(sharesiesStats.total_withdrawals) - parseFloat(sharesiesStats.total_deposits);
+
     print.line();
     print.heading('summary');
     print.info(`Wallet Balance: ${cprint.toGreen('$' + walletBalance.toFixed(2))}`);
@@ -180,11 +182,12 @@ sync.runGenerator(function*() {
     print.line();
     print.info(`Total Deposits: ${cprint.toGreen('$' + parseFloat(sharesiesStats.total_deposits).toFixed(2))}`);
     print.info(`Total Withdrawals: ${cprint.toRed('$' + parseFloat(sharesiesStats.total_withdrawals).toFixed(2))}`);
-    print.info(`Total Value: ${lightGreenFn('$' + parseFloat(sharesiesStats.total_portfolio).toFixed(2))}`);
+    print.info(`Total Value: ${cprint.toCyan('$' + parseFloat(sharesiesStats.total_portfolio).toFixed(2))}`);
+    print.info(`Total Return: ${lightGreenFn('$' + parseFloat(totalReturn).toFixed(2))}`);
     print.line();
     print.heading('investment strategy (last 2 weeks)');
     print.info(`Max Return: ${lightGreenFn('$' + maxInvestmentReturn.toFixed(2))} ${lightBlueFn('=> ' + maxInvestmentFundCodes)}`);
-    print.info(`Total Return: ${lightGreenFn('$' + investmentReturn.toFixed(2))} ${lightBlueFn('=> ' + investmentFundCodes)}`);
+    print.info(`Return: ${lightGreenFn('$' + investmentReturn.toFixed(2))} ${lightBlueFn('=> ' + investmentFundCodes)}`);
     print.info(`Return per Day: ${lightGreenFn('$' + parseFloat(totalReturnsPerDay).toFixed(2))}`);
 });
 

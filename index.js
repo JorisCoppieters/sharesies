@@ -39,10 +39,12 @@ sync.runGenerator(function*() {
         config.set('password', readline.sync('Please enter your password: '));
     }
 
-    yield sharesies.login(
+    let loginData = yield sharesies.login(
         config.get('username'),
         config.get('password')
     );
+
+    let user = loginData.user;
 
     let funds = yield sharesies.getFundsCleaned();
 
@@ -90,7 +92,7 @@ sync.runGenerator(function*() {
     let fundsDistribution = adjustedFundsDistribution
         .map(score => score / adjustedFundsDistributionSum);
 
-    yield sharesies.clearCart();
+    yield sharesies.clearCart(user);
 
     yield sortedFundsByBuy
         .forEachThen((fundInfo, idx) => {
@@ -140,8 +142,8 @@ sync.runGenerator(function*() {
         .map(order => order['requested_nzd_amount'])
         .reduce((total, amount) => total + amount, 0));
 
-    let sharesiesStats = yield sharesies.getStats();
-    let sharesiesTransactions = yield sharesies.getTransactions();
+    let sharesiesStats = yield sharesies.getStats(user);
+    let sharesiesTransactions = yield sharesies.getTransactions(user);
 
     let daysAgo = 14;
 

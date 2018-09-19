@@ -7,10 +7,12 @@
 // ******************************
 
 const fs = require('fs');
+const path = require('path');
 const vega = require('vega');
 
 require('./lib/date');
 const config = require('./lib/config');
+const exec = require('./lib/exec');
 const readline = require('./lib/readline');
 const sharesies = require('./lib/sharesies');
 const sync = require('./lib/sync');
@@ -95,14 +97,16 @@ function drawBuyingChart(sortedFundsByBuy, marketPricesNormalized) {
             }, [])
     }];
 
-    drawLineChart(chartData, 'line-chart-buy');
+    viewLineChart(chartData, 'line-chart-buy');
 }
 
 // ******************************
 
-function drawLineChart(chartData, chartName) {
+function viewLineChart(chartData, chartName) {
     let lineChart = require('./line-chart.json');
     lineChart.data = chartData;
+
+    let lineChartImg = path.resolve(getTemp(), chartName + '.png');
 
     let view = new vega.View(vega.parse(lineChart))
         .logLevel(vega.warn)
@@ -112,14 +116,25 @@ function drawLineChart(chartData, chartName) {
     view
         .toCanvas()
         .then(canvas => {
-            fs.writeFileSync(chartName + '.png', canvas.toBuffer());
+            fs.writeFile(lineChartImg, canvas.toBuffer(), () => {
+                exec.cmd('explorer', [
+                    lineChartImg
+                ], {
+                    hide: true
+                });
+            });
         })
         .catch(err => {
             process.stderr.write(err + '\n');
         });
 
     view.finalize();
-    view = null;
+}
+
+// ******************************
+
+function getTemp() {
+    return process.env['TEMP'] || process.env['TMP'] || '/tmp';
 }
 
 // ******************************

@@ -22,7 +22,7 @@ const sync = require('./lib/sync');
 
 const INVESTMENT_AMOUNT = 1000;
 const BUY_SCORE_THRESHOLD = 0.5;
-const AUTO_SELL_SCORE_THRESHOLD = -10;//-0.1;
+const AUTO_SELL_SCORE_THRESHOLD = 0.45;
 const MIN_FUND_ALOCATION = 5;
 const DISTRIBUTION_MAGNITUDE = 3;
 
@@ -94,6 +94,8 @@ sync.runGenerator(function*() {
 
     yield sharesies.clearCart(user);
 
+    let boughtFunds = false;
+
     yield sortedFundsByBuy
         .forEachThen((fundInfo, idx) => {
             let fundAllocation = parseInt(fundsDistribution[idx] * walletBalance * 100) / 100;
@@ -101,11 +103,19 @@ sync.runGenerator(function*() {
                 return;
             }
             print.action(`=> Auto investing $${fundAllocation} into ${fundInfo.fund.code}`);
-            return sharesies.buyFund(fundInfo.fund, fundAllocation).then(data => {
+            return sharesies.buyFund(user, fundInfo.fund, fundAllocation).then(data => {
                 print.errors(data);
+                boughtFunds = true;
                 return Promise.resolve(true);
             });
         });
+
+    if (boughtFunds) {
+        yield sharesies.confirmInvestment(user).then(data => {
+            print.errors(data);
+            return Promise.resolve(true);
+        });
+    }
 
     print.line();
     print.heading('actions for selling');
@@ -123,8 +133,9 @@ sync.runGenerator(function*() {
             if (fundInfo.info.score <= AUTO_SELL_SCORE_THRESHOLD) {
                 let sharesAmount = sharesAmountByFundId[fundInfo.fund.id];
                 print.action(`=> Auto selling ${sharesAmount} shares for ${fundInfo.fund.code}`);
-                return sharesies.sellFund(fundInfo.fund, sharesAmount).then(data => {
-                    print.errors(data) || print.info(data);
+                return sharesies.sellFund(user, fundInfo.fund, sharesAmount).then(data => {
+                    print.errors(data);
+                    return Promise.resolve(true);
                 });
             } else {
                 print.info(`You might want to sell shares for ${fundInfo.fund.code}`);
@@ -135,12 +146,12 @@ sync.runGenerator(function*() {
     let sellingAmount = parseInt(sharesiesInfo.orders
         .filter(order => order.type === 'sell')
         .map(order => order['shares'])
-        .reduce((total, amount) => total + amount, 0));
+        .reduce((total, amount) => total + parseInt(amount, 10), 0));
 
     let purchaseAmount = parseFloat(sharesiesInfo.orders
         .filter(order => order.type === 'buy')
         .map(order => order['requested_nzd_amount'])
-        .reduce((total, amount) => total + amount, 0));
+        .reduce((total, amount) => total + parseInt(amount, 10), 0));
 
     let sharesiesStats = yield sharesies.getStats(user);
     let sharesiesTransactions = yield sharesies.getTransactions(user);

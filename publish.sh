@@ -1,16 +1,9 @@
 #!/bin/bash
 
-if [[ $# -lt 1 ]]; then
-  echo "Please specify a version";
-  exit;
-fi
-
 NPM=npm
 if [[ -e /usr/local/bin/npmme ]]; then
   NPM=/usr/local/bin/npmme
 fi
-
-VERSION=$1
 
 function ask {
   read -r -p "$@ [y/N] " response
@@ -24,6 +17,21 @@ function ask {
   esac
 }
 
+function update_version {
+    OLD_VERSION=$(cat ./package.json | jq -r '.version');
+    OLD_VERSION_MAJOR=$(echo $OLD_VERSION | awk 'BEGIN{FS="."}{print $1}');
+    OLD_VERSION_MINOR=$(echo $OLD_VERSION | awk 'BEGIN{FS="."}{print $2}');
+    OLD_VERSION_BUG=$(echo $OLD_VERSION | awk 'BEGIN{FS="."}{print $3}');
+
+    NEW_VERSION_MAJOR=$OLD_VERSION_MAJOR;
+    NEW_VERSION_MINOR=$OLD_VERSION_MINOR;
+    NEW_VERSION_BUG=$(echo "$OLD_VERSION_BUG" + 1 | bc);
+    NEW_VERSION="$NEW_VERSION_MAJOR.$NEW_VERSION_MINOR.$NEW_VERSION_BUG";
+
+    echo $NEW_VERSION
+}
+
+VERSION=$(update_version)
 echo "Updating version number in files..."
 sed -i "s/\"version\": \".*\",/\"version\": \"$VERSION\",/g" package.json
 

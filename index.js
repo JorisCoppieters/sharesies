@@ -103,7 +103,7 @@ sync.runGenerator(function*() {
                 return;
             }
             print.action(`=> Auto investing $${fundAllocation} into ${fundInfo.fund.code}`);
-            return sharesies.buyFund(user, fundInfo.fund, fundAllocation).then(data => {
+            return sharesies.addCartItem(user, fundInfo.fund, fundAllocation).then(data => {
                 print.errors(data);
                 boughtFunds = true;
                 return Promise.resolve(true);
@@ -111,7 +111,7 @@ sync.runGenerator(function*() {
         });
 
     if (boughtFunds) {
-        yield sharesies.confirmInvestment(user).then(data => {
+        yield sharesies.confirmCart(user, config.get('password')).then(data => {
             print.errors(data);
             return Promise.resolve(true);
         });

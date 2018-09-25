@@ -20,11 +20,14 @@ const sync = require('./lib/sync');
 // Constants:
 // ******************************
 
+const DRY_RUN = false;
 const INVESTMENT_AMOUNT = 1000;
 const BUY_SCORE_THRESHOLD = 0.5;
 const AUTO_SELL_SCORE_THRESHOLD = 0.45;
+const AUTO_BUY_SCORE_THRESHOLD = 0.55;
 const MIN_FUND_ALOCATION = 5;
 const DISTRIBUTION_MAGNITUDE = 3;
+const EXPLORATORY_RATIO = 0.6;
 
 // ******************************
 
@@ -69,47 +72,30 @@ sync.runGenerator(function*() {
 
     print.line();
     print.heading('sell scores');
+
     sortedFundsBySell
         .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
 
     print.line();
     print.heading('buy scores');
+
     sortedFundsByBuy
         .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
 
     let sharesiesInfo = yield sharesies.getInfo();
+    let sharesiesStats = yield sharesies.getStats(user);
+    let sharesiesTransactions = yield sharesies.getTransactions(user);
+
     let walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
+    let portfolioBalance = parseFloat(sharesiesStats.total_portfolio);
+
+    let investmentBalance = walletBalance + portfolioBalance;
+    let exploratoryInvestmentBalance = parseInt(investmentBalance * EXPLORATORY_RATIO);
 
     print.line();
     print.heading('actions for buying');
 
-    let totalScore = sortedFundsByBuy.reduce((scoreSum, fundInfo) => scoreSum + fundInfo.info.score, 0);
-    let adjustedFundsDistribution = sortedFundsByBuy
-        .map(fundInfo => fundInfo.info.score / totalScore)
-        .map(score => Math.pow(score, DISTRIBUTION_MAGNITUDE));
-
-    let adjustedFundsDistributionSum = adjustedFundsDistribution.reduce((total, score) => total + score, 0);
-    let fundsDistribution = adjustedFundsDistribution
-        .map(score => score / adjustedFundsDistributionSum);
-
-    yield sharesies.clearCart(user);
-
-    let boughtFunds = false;
-
-    yield sortedFundsByBuy
-        .forEachThen((fundInfo, idx) => {
-            let fundAllocation = parseInt(fundsDistribution[idx] * walletBalance * 100) / 100;
-            if (fundAllocation < MIN_FUND_ALOCATION) {
-                return;
-            }
-            print.action(`=> Auto investing $${fundAllocation} into ${fundInfo.fund.code}`);
-            return sharesies.addCartItem(user, fundInfo.fund, fundAllocation).then(data => {
-                print.errors(data);
-                boughtFunds = true;
-                return Promise.resolve(true);
-            });
-        });
-
+    let boughtFunds = yield buyShares(user, walletBalance, sortedFundsByBuy);
     if (boughtFunds) {
         yield sharesies.confirmCart(user, config.get('password')).then(data => {
             print.errors(data);
@@ -120,28 +106,8 @@ sync.runGenerator(function*() {
     print.line();
     print.heading('actions for selling');
 
-    let portfolioFundIds = sharesiesInfo.funds.map(fund => fund.fund_id);
-    let sharesAmountByFundId = sharesiesInfo.funds.reduce((dict, fund) => {
-        dict[fund.fund_id] = fund.shares;
-        return dict;
-    }, {});
-
-    let sortedFundsBySellInPortfolio = sortedFundsBySell.filter(fundInfo => portfolioFundIds.indexOf(fundInfo.fund.id) >= 0);
-
-    yield sortedFundsBySellInPortfolio
-        .forEachThen(fundInfo => {
-            if (fundInfo.info.score <= AUTO_SELL_SCORE_THRESHOLD) {
-                let sharesAmount = sharesAmountByFundId[fundInfo.fund.id];
-                print.action(`=> Auto selling ${sharesAmount} shares for ${fundInfo.fund.code}`);
-                return sharesies.sellFund(user, fundInfo.fund, sharesAmount).then(data => {
-                    print.errors(data);
-                    return Promise.resolve(true);
-                });
-            } else {
-                print.info(`You might want to sell shares for ${fundInfo.fund.code}`);
-                return Promise.resolve();
-            }
-        });
+    yield sellShares(user, sharesiesInfo, sortedFundsBySell, exploratoryInvestmentBalance);
+    sharesiesInfo = yield sharesies.getInfo();
 
     let sellingAmount = parseInt(sharesiesInfo.orders
         .filter(order => order.type === 'sell')
@@ -153,23 +119,20 @@ sync.runGenerator(function*() {
         .map(order => order['requested_nzd_amount'])
         .reduce((total, amount) => total + parseInt(amount, 10), 0));
 
-    let sharesiesStats = yield sharesies.getStats(user);
-    let sharesiesTransactions = yield sharesies.getTransactions(user);
-
     let daysAgo = 14;
 
     let maxInvestmentStrategy = getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo);
     let maxInvestmentReturn = maxInvestmentStrategy.totalReturn;
     let maxInvestmentFundCodes = maxInvestmentStrategy.funds
         .filter(fund => fund.code !== 'NONE')
-        .filter((fund, idx) => idx < 3)
+        .filter((_, idx) => idx < 3)
         .map(fund => fund.code + 'x' + fund.count).join(', ');
 
     let investmentStrategy = getInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo);
     let investmentReturn = investmentStrategy.totalReturn;
     let investmentFundCodes = investmentStrategy.funds
         .filter(fund => fund.code !== 'NONE')
-        .filter((fund, idx) => idx < 3)
+        .filter((_, idx) => idx < 3)
         .map(fund => fund.code + 'x' + fund.count).join(', ');
 
     let totalReturnsPerDay = parseFloat(investmentReturn) / daysAgo;
@@ -203,6 +166,96 @@ sync.runGenerator(function*() {
     print.info(`Return: ${lightGreenFn('$' + investmentReturn.toFixed(2))} ${lightBlueFn('=> ' + investmentFundCodes)}`);
     print.info(`Return per Day: ${lightGreenFn('$' + parseFloat(totalReturnsPerDay).toFixed(2))}`);
 });
+
+// ******************************
+
+function buyShares(user, exploratoryAmountToBuy, sortedFundsByBuy) {
+    let totalScore = sortedFundsByBuy.reduce((scoreSum, fundInfo) => scoreSum + fundInfo.info.score, 0);
+    let adjustedFundsDistribution = sortedFundsByBuy
+        .map(fundInfo => fundInfo.info.score / totalScore)
+        .map(score => Math.pow(score, DISTRIBUTION_MAGNITUDE));
+
+    let adjustedFundsDistributionSum = adjustedFundsDistribution.reduce((total, score) => total + score, 0);
+    let fundsDistribution = adjustedFundsDistribution
+        .map(score => score / adjustedFundsDistributionSum);
+
+    let boughtFunds = false;
+    return sharesies.clearCart(user)
+        .then(sortedFundsByBuy
+            .forEachThen((fundInfo, idx) => {
+                if (fundInfo.info.score >= AUTO_BUY_SCORE_THRESHOLD) {
+                    let fundAllocation = parseInt(fundsDistribution[idx] * exploratoryAmountToBuy * 100) / 100;
+                    if (fundAllocation < MIN_FUND_ALOCATION) {
+                        return;
+                    }
+                    print.action(`=> Auto investing $${fundAllocation} into ${fundInfo.fund.code}`);
+
+                    if (DRY_RUN) {
+                        return Promise.resolve();
+                    } else {
+                        return sharesies.addCartItem(user, fundInfo.fund, fundAllocation).then(data => {
+                            print.errors(data);
+                            boughtFunds = true;
+                            return Promise.resolve(true);
+                        });
+                    }
+
+                } else {
+                    print.info(`You might want to buy shares for ${fundInfo.fund.code}`);
+                    return Promise.resolve();
+                }
+            })
+        )
+        .then(() => boughtFunds);
+}
+
+// ******************************
+
+function sellShares(user, sharesiesInfo, sortedFundsBySell, exploratoryAmountToSell) {
+    let portfolioFundIds = sharesiesInfo.funds.map(fund => fund.fund_id);
+    let sharesAmountByFundId = sharesiesInfo.funds.reduce((dict, fund) => {
+        dict[fund.fund_id] = fund.shares;
+        return dict;
+    }, {});
+
+    let amountSold = 0;
+
+    let sortedFundsBySellInPortfolio = sortedFundsBySell.filter(fundInfo => portfolioFundIds.indexOf(fundInfo.fund.id) >= 0);
+    return sortedFundsBySellInPortfolio
+        .forEachThen(fundInfo => {
+            if (amountSold >= exploratoryAmountToSell) {
+                return;
+            }
+            if (fundInfo.info.score <= AUTO_SELL_SCORE_THRESHOLD) {
+                let sharesAmount = sharesAmountByFundId[fundInfo.fund.id];
+                let sharePrice = fundInfo.info.currentPrice;
+                let sharesValue = Math.round(sharesAmount * sharePrice * 100) / 100;
+
+                let maxSellAmount = (exploratoryAmountToSell - amountSold);
+                if (sharesValue > maxSellAmount) {
+                    sharesAmount = parseInt(maxSellAmount / sharePrice);
+                    sharesValue = Math.round(sharesAmount * sharePrice * 100) / 100;
+                }
+
+                print.action(`=> Auto selling ${sharesAmount} shares ($${sharesValue}) for ${fundInfo.fund.code}`);
+                amountSold += sharesValue;
+
+                if (DRY_RUN) {
+                    return Promise.resolve();
+                } else {
+                    return sharesies.sellFund(user, fundInfo.fund, sharesAmount).then(data => {
+                        print.errors(data);
+                        return Promise.resolve(true);
+                    });
+                }
+
+            } else {
+                print.info(`You might want to sell shares for ${fundInfo.fund.code}`);
+                return Promise.resolve();
+            }
+        })
+        .then(() => amountSold);
+}
 
 // ******************************
 
@@ -306,7 +359,7 @@ function getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo) {
     let daysSinceBeginning = parseInt((now - startDate) / (24 * 3600 * 1000));
 
     let fundHistoryDays = sortedFunds[0].info.fundPrices.length;
-    let investmentPeriod = 5;
+    let investmentPeriod = 2;
 
     let totalReturn = 0;
     let totalValue = 0;
@@ -351,6 +404,7 @@ function getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo) {
         }
 
         let fundDayIdx = dayIdx + (fundHistoryDays - daysSinceBeginning);
+
         let maxFund = sortedFunds
             .map(sortedFund => {
                 return {
@@ -366,7 +420,6 @@ function getMaxInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo) {
             }])
             .reverse()
             .sort((a, b) => b.fundMultiplierAtIdx - a.fundMultiplierAtIdx)[0];
-
 
         let before = totalValue;
         let after = before * maxFund.fundMultiplierAtIdx;

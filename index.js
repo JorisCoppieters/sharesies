@@ -20,7 +20,7 @@ const sync = require('./lib/sync');
 // Constants:
 // ******************************
 
-const DRY_RUN = true;
+const DRY_RUN = false;
 const INVESTMENT_AMOUNT = 1000;
 const BUY_SCORE_THRESHOLD = 0.6;
 const AUTO_SELL_SCORE_THRESHOLD = 0.55;
@@ -109,10 +109,12 @@ sync.runGenerator(function*() {
     let diversificationInvestmentBalance = priceRound(investmentBalance - exploratoryInvestmentBalance);
 
     print.line();
-    print.heading('actions for buying');
-
+    print.heading('Investment Split');
     print.info(`Using $${exploratoryInvestmentBalance} for exploratory investment`);
     print.info(`Keeping $${diversificationInvestmentBalance} for diversification investment`);
+
+    print.line();
+    print.heading('actions for buying');
 
     let fundsAllocated = yield buyShares(user, sharesiesInfo, exploratoryInvestmentBalance, walletBalance, sortedFundsByBuy);
     if (fundsAllocated.boughtNew) {
@@ -128,11 +130,11 @@ sync.runGenerator(function*() {
     let fundsSaleAllocation = Math.max(0, priceRound(exploratoryInvestmentBalance - fundsAllocated.totalValue));
 
     if (fundsSaleAllocation > 0) {
-        print.info(`Used only $${fundsAllocated.totalValue} for exploratory investment, so need to sell $${fundsSaleAllocation} for further exploratory investment`);
+        print.info(`Found only $${fundsAllocated.totalValue} for exploratory investment, so need to sell $${fundsSaleAllocation} for further exploratory investment`);
         yield sellShares(user, sharesiesInfo, sortedFundsBySell, Math.max(0, exploratoryInvestmentBalance - fundsAllocated.totalValue));
         sharesiesInfo = yield sharesies.getInfo();
     } else {
-        print.info(`Used all $${fundsAllocated.totalValue} for exploratory investment`);
+        print.info(`Found all $${fundsAllocated.totalValue} for exploratory investment, no need to sell`);
     }
 
     let daysAgo = 14;

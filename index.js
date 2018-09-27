@@ -22,12 +22,12 @@ const sync = require('./lib/sync');
 
 const DRY_RUN = true;
 const INVESTMENT_AMOUNT = 1000;
-const BUY_SCORE_THRESHOLD = 0.5;
-const AUTO_SELL_SCORE_THRESHOLD = 0.45;
-const AUTO_BUY_SCORE_THRESHOLD = 0.55;
+const BUY_SCORE_THRESHOLD = 0.6;
+const AUTO_SELL_SCORE_THRESHOLD = 0.55;
+const AUTO_BUY_SCORE_THRESHOLD = 0.65;
 const MIN_FUND_ALOCATION = 5;
 const DISTRIBUTION_MAGNITUDE = 3;
-const EXPLORATORY_RATIO = 0.6;
+const EXPLORATORY_RATIO = 0.5;
 
 // ******************************
 
@@ -89,7 +89,22 @@ sync.runGenerator(function*() {
     let walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
     let portfolioBalance = parseFloat(sharesiesStats.total_portfolio);
 
-    let investmentBalance = walletBalance + portfolioBalance;
+    let sellingSharesValue = priceRound(sharesiesInfo.orders
+        .filter(order => order.type === 'sell')
+        .map(order => {
+            let fund = funds
+                .find(fund => fund.id === order['fund_id']);
+
+            return order['shares'] * fund.market_price;
+        })
+        .reduce((total, amount) => total + parseFloat(amount), 0));
+
+    let purchaseSharesValue = priceRound(sharesiesInfo.orders
+        .filter(order => order.type === 'buy')
+        .map(order => order['requested_nzd_amount'])
+        .reduce((total, amount) => total + parseFloat(amount), 0));
+
+    let investmentBalance = walletBalance + portfolioBalance + purchaseSharesValue;
     let exploratoryInvestmentBalance = priceRound(investmentBalance * EXPLORATORY_RATIO);
     let diversificationInvestmentBalance = priceRound(investmentBalance - exploratoryInvestmentBalance);
 
@@ -119,16 +134,6 @@ sync.runGenerator(function*() {
     } else {
         print.info(`Used all $${fundsAllocated.totalValue} for exploratory investment`);
     }
-
-    let sellingSharesAmount = numberRound(sharesiesInfo.orders
-        .filter(order => order.type === 'sell')
-        .map(order => order['shares'])
-        .reduce((total, amount) => total + parseFloat(amount), 0));
-
-    let purchaseSharesValue = priceRound(sharesiesInfo.orders
-        .filter(order => order.type === 'buy')
-        .map(order => order['requested_nzd_amount'])
-        .reduce((total, amount) => total + parseFloat(amount), 0));
 
     let daysAgo = 14;
 
@@ -165,7 +170,7 @@ sync.runGenerator(function*() {
     print.heading('summary');
     print.info(`Wallet Balance: ${cprint.toGreen('$' + walletBalance.toFixed(2))}`);
     print.info(`Buying Shares: ${cprint.toGreen('$' + purchaseSharesValue.toFixed(2))}`);
-    print.info(`Selling Shares: ${cprint.toRed('#' + sellingSharesAmount)}`);
+    print.info(`Selling Shares: ${cprint.toRed('$' + sellingSharesValue.toFixed(2))}`);
     print.line();
     print.info(`Total Deposits: ${cprint.toGreen('$' + parseFloat(sharesiesStats.total_deposits).toFixed(2))}`);
     print.info(`Total Withdrawals: ${cprint.toRed('$' + parseFloat(sharesiesStats.total_withdrawals).toFixed(2))}`);
@@ -181,6 +186,8 @@ sync.runGenerator(function*() {
 // ******************************
 
 function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance, sortedFundsByBuy) {
+    let availableFundAllocation = walletBalance;
+
     let totalScore = sortedFundsByBuy.reduce((scoreSum, fundInfo) => scoreSum + fundInfo.info.score, 0);
     let adjustedFundsDistribution = sortedFundsByBuy
         .map(fundInfo => fundInfo.info.score / totalScore)
@@ -206,12 +213,19 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
             .forEachThen((fundInfo, idx) => {
                 if (fundInfo.info.score >= AUTO_BUY_SCORE_THRESHOLD) {
                     let desiredFundAllocation = priceRound(fundsDistribution[idx] * exploratoryBuyAllocation);
-                    let availableFundAllocation = priceRound(fundsDistribution[idx] * walletBalance);
 
                     let sharePrice = fundInfo.info.currentPrice;
 
-                    let currentSharesAmount = sharesAmountByFundId[fundInfo.fund.id] || 0;
+                    let currentSharesAmount = parseFloat(sharesAmountByFundId[fundInfo.fund.id] || 0);
+                    let buyingSharesAmount = sharesiesInfo.orders
+                        .filter(order => order.type === 'buy' && order.fund_id === fundInfo.fund.id)
+                        .map(order => parseInt(order['requested_nzd_amount'] / sharePrice))
+                        .reduce((_, amount) => parseFloat(amount), 0);
+
+                    currentSharesAmount += buyingSharesAmount;
+
                     let desiredSharesAmount = numberRound(desiredFundAllocation / sharePrice);
+
                     if (desiredSharesAmount <= currentSharesAmount) {
                         fundsAllocated.totalValue += desiredFundAllocation;
                         print.info(`Already have ${desiredSharesAmount} shares ($${desiredFundAllocation}) for ${fundInfo.fund.code}, no more desired`);
@@ -228,19 +242,20 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
                         print.info(`Already have ${currentSharesAmount} shares ($${currentSharesValueInvested}) for ${fundInfo.fund.code} but investing more...`);
                     }
 
-                    let fundAllocation = Math.min(availableFundAllocation, priceRound((desiredSharesAmount - currentSharesAmount) * sharePrice));
+                    let fundAllocation = priceRound(Math.min(availableFundAllocation, (desiredSharesAmount - currentSharesAmount) * sharePrice));
                     let sharesAmountToBuy = numberRound(fundAllocation / sharePrice);
 
                     fundsAllocated.totalValue += currentSharesValueInvested + fundAllocation;
 
                     print.action(`=> Auto investing ${sharesAmountToBuy} shares ($${fundAllocation}) into ${fundInfo.fund.code}`);
+                    availableFundAllocation -= fundAllocation;
+                    fundsAllocated.boughtNew = true;
 
                     if (DRY_RUN) {
                         return Promise.resolve();
                     } else {
                         return sharesies.addCartItem(user, fundInfo.fund, fundAllocation).then(data => {
                             print.errors(data);
-                            fundsAllocated.boughtNew = true;
                             return Promise.resolve(true);
                         });
                     }
@@ -251,7 +266,10 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
                 }
             })
         )
-        .then(() => fundsAllocated);
+        .then(() => {
+            fundsAllocated.totalValue = priceRound(fundsAllocated.totalValue);
+            return fundsAllocated;
+        });
 }
 
 // ******************************
@@ -273,13 +291,25 @@ function sellShares(user, sharesiesInfo, sortedFundsBySell, exploratorySellAlloc
                 return;
             }
             if (fundInfo.info.score <= AUTO_SELL_SCORE_THRESHOLD) {
-                let sharesAmount = sharesAmountByFundId[fundInfo.fund.id];
+                let sharesAmount = parseFloat(sharesAmountByFundId[fundInfo.fund.id] || 0);
                 let sharePrice = fundInfo.info.currentPrice;
+
+                let sellingSharesAmount = sharesiesInfo.orders
+                    .filter(order => order.type === 'sell' && order.fund_id === fundInfo.fund.id)
+                    .map(order => order['shares'] * sharePrice)
+                    .reduce((_, amount) => parseFloat(amount), 0);
+
+                sharesAmount -= sellingSharesAmount;
+
                 let sharesValue = priceRound(sharesAmount * sharePrice);
 
-                let maxSaleValue = (exploratorySellAllocation - totalSoldValue);
+                let maxSaleValue = Math.min(exploratorySellAllocation - totalSoldValue, sharesValue - 200);
+                if (maxSaleValue <= 0) {
+                    return;
+                }
+
                 if (sharesValue > maxSaleValue) {
-                    sharesAmount = numberRound(maxSaleValue / sharePrice);
+                    sharesAmount = Math.max(1, numberRound(maxSaleValue / sharePrice));
                     sharesValue = priceRound(sharesAmount * sharePrice);
                 }
 

@@ -226,10 +226,12 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
 
                     currentSharesAmount += buyingSharesAmount;
 
+                    let currentSharesValue = priceRound(currentSharesAmount * sharePrice);
+
                     let desiredSharesAmount = numberRound(desiredFundAllocation / sharePrice);
 
                     if (desiredSharesAmount <= currentSharesAmount) {
-                        fundsAllocated.totalValue += desiredFundAllocation;
+                        fundsAllocated.totalValue += currentSharesValue;
                         print.info(`Already have ${desiredSharesAmount} shares ($${desiredFundAllocation}) for ${fundInfo.fund.code}, no more desired`);
                         return;
                     }

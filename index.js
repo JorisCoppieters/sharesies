@@ -142,7 +142,7 @@ sync.runGenerator(function*() {
         print.info(`Found all $${fundsFound} for exploratory investment, no need to sell`);
     }
 
-    let daysAgo = 5;
+    let daysAgo = 7;
 
     let maxInvestmentStrategy = getMaxInvestmentStrategy(sortedFunds, daysAgo);
     let maxInvestmentFundCodes = maxInvestmentStrategy.bestValueIncreases

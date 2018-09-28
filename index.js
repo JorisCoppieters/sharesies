@@ -222,7 +222,7 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
                     let buyingSharesAmount = sharesiesInfo.orders
                         .filter(order => order.type === 'buy' && order.fund_id === fundInfo.fund.id)
                         .map(order => parseInt(order['requested_nzd_amount'] / sharePrice))
-                        .reduce((_, amount) => parseFloat(amount), 0);
+                        .reduce((total, amount) => total + parseFloat(amount), 0);
 
                     currentSharesAmount += buyingSharesAmount;
 
@@ -236,20 +236,26 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
                         return;
                     }
 
-                    if (availableFundAllocation < MIN_FUND_ALOCATION) {
-                        print.warning(`Cannot invest into ${fundInfo.fund.code} since it will be below the minimum fund allocation $${MIN_FUND_ALOCATION}`);
-                        return;
-                    }
-
                     let currentSharesValueInvested = priceRound(currentSharesAmount * sharePrice);
                     if (currentSharesAmount) {
                         print.info(`Already have ${currentSharesAmount} shares ($${currentSharesValueInvested}) for ${fundInfo.fund.code} but investing more...`);
                     }
 
+                    fundsAllocated.totalValue += currentSharesValueInvested;
+
+                    if (availableFundAllocation <= 0.01) {
+                        return;
+                    }
+
+                    if (availableFundAllocation < MIN_FUND_ALOCATION) {
+                        print.warning(`Cannot invest $${availableFundAllocation} into ${fundInfo.fund.code} since it will be below the minimum fund allocation $${MIN_FUND_ALOCATION}`);
+                        return;
+                    }
+
                     let fundAllocation = priceRound(Math.min(availableFundAllocation, (desiredSharesAmount - currentSharesAmount) * sharePrice));
                     let sharesAmountToBuy = numberRound(fundAllocation / sharePrice);
 
-                    fundsAllocated.totalValue += currentSharesValueInvested + fundAllocation;
+                    fundsAllocated.totalValue += fundAllocation;
 
                     print.action(`=> Auto investing ${sharesAmountToBuy} shares ($${fundAllocation}) into ${fundInfo.fund.code}`);
                     availableFundAllocation -= fundAllocation;
@@ -534,7 +540,7 @@ function numberRound(in_number) {
 // ******************************
 
 function priceRound(in_price) {
-    return Math.round(in_price * 100) / 100;
+    return parseInt(in_price * 100) / 100;
 }
 
 // ******************************

@@ -104,7 +104,15 @@ sync.runGenerator(function*() {
 
     let investmentBalance = walletBalance + portfolioBalance + purchaseSharesValue;
     let exploratoryInvestmentBalance = priceRound(investmentBalance * EXPLORATORY_RATIO);
+    let exploratoryInvestmentScore = sortedFundsByBuy.length ? sortedFundsByBuy
+        .map(fundInfo => {
+            return Math.pow(fundInfo.info.score, DISTRIBUTION_MAGNITUDE);
+        })
+        .reduce((scoreSum, score) => scoreSum + score, 0) / sortedFundsByBuy.length : 0;
+
     let diversificationInvestmentBalance = priceRound(investmentBalance - exploratoryInvestmentBalance);
+
+    exploratoryInvestmentBalance = exploratoryInvestmentBalance * exploratoryInvestmentScore;
 
     print.line();
     print.heading('Investment Split');
@@ -128,16 +136,20 @@ sync.runGenerator(function*() {
     let fundsFound = priceRound(fundsAllocated.totalValue + sellingSharesValue);
     let fundsSaleAllocation = Math.max(0, priceRound(exploratoryInvestmentBalance - fundsFound));
 
-    if (fundsSaleAllocation > 0) {
+    if (exploratoryInvestmentBalance <= 0) {
+        print.info('No balance to invest');
+    } else if (fundsSaleAllocation > 0) {
         if (fundsSaleAllocation < 100) {
             print.info(`Found only $${fundsFound} for exploratory investment, but that is close enough`);
+            yield sellShares(user, sharesiesInfo, sortedFunds, 0);
+            sharesiesInfo = yield sharesies.getInfo();
         } else {
             print.info(`Found only $${fundsFound} for exploratory investment, so need to sell $${fundsSaleAllocation} for further exploratory investment`);
             yield sellShares(user, sharesiesInfo, sortedFunds, fundsSaleAllocation);
             sharesiesInfo = yield sharesies.getInfo();
         }
     } else if (sellingSharesValue) {
-        print.info(`Found only $${fundsFound} for exploratory investment, but already selling $${sellingSharesValue}, no need to sell more`);
+        print.info(`Found all $${fundsFound} for exploratory investment (including selling $${sellingSharesValue}), no need to sell more`);
     } else {
         print.info(`Found all $${fundsFound} for exploratory investment, no need to sell`);
     }
@@ -298,22 +310,31 @@ function sellShares(user, sharesiesInfo, sortedFunds, exploratorySellAllocation)
     return sortedFundsInPortfolio
         .sort((a, b) => a.info.score - b.info.score)
         .forEachThen(fundInfo => {
-            if (totalSoldValue >= exploratorySellAllocation) {
-                return;
-            }
             let sharesAmount = parseFloat(sharesAmountByFundId[fundInfo.fund.id] || 0);
             let sharePrice = fundInfo.info.currentPrice;
-
             let sharesValue = priceRound(sharesAmount * sharePrice);
 
-            let maxSaleValue = Math.min(exploratorySellAllocation - totalSoldValue, sharesValue - 200);
-            if (maxSaleValue <= 0) {
-                return;
-            }
+            if (fundInfo.info.score < BUY_SCORE_THRESHOLD) {
+                if (sharesValue <= 200) {
+                    return;
+                }
 
-            if (sharesValue > maxSaleValue) {
-                sharesAmount = Math.max(1, numberRound(maxSaleValue / sharePrice));
+                sharesAmount = Math.max(1, numberRound((sharesValue - 200) / sharePrice));
                 sharesValue = priceRound(sharesAmount * sharePrice);
+            } else {
+                if (totalSoldValue >= exploratorySellAllocation) {
+                    return;
+                }
+
+                let maxSaleValue = Math.min(exploratorySellAllocation - totalSoldValue, sharesValue - 200);
+                if (maxSaleValue <= 0) {
+                    return;
+                }
+
+                if (sharesValue > maxSaleValue) {
+                    sharesAmount = Math.max(1, numberRound(maxSaleValue / sharePrice));
+                    sharesValue = priceRound(sharesAmount * sharePrice);
+                }
             }
 
             print.action(`=> Auto selling ${sharesAmount} shares ($${sharesValue}) for ${fundInfo.fund.code}`);
@@ -384,8 +405,9 @@ function getInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo) {
 
         let fundDayIdx = dayIdx + (fundHistoryDays - daysSinceBeginning);
 
-        let maxMultiplier = 1;
+        let maxReturn = 0;
         let maxFundCode = 'NONE';
+        let maxFundMultiplierAtIdx = 1;
 
         sortedFunds
             .forEach(sortedFund => {
@@ -398,9 +420,10 @@ function getInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo) {
 
                 if (dayIdx >= daysSinceBeginning - daysAgo) {
                     totalReturn += fundReturn;
-                    if (fundMultiplierAtIdx > maxMultiplier) {
-                        maxMultiplier = fundMultiplierAtIdx;
+                    if (fundReturn > maxReturn) {
+                        maxReturn = fundReturn;
                         maxFundCode = sortedFund.fund.code;
+                        maxFundMultiplierAtIdx = fundMultiplierAtIdx;
                     }
                 }
             });
@@ -408,14 +431,15 @@ function getInvestmentStrategy(sharesiesTransactions, sortedFunds, daysAgo) {
         if (dayIdx >= daysSinceBeginning - daysAgo) {
             bestValueIncreases.push({
                 fundCode: maxFundCode,
-                fundMultiplierAtIdx: maxMultiplier
+                fundReturn: maxReturn,
+                fundMultiplierAtIdx: maxFundMultiplierAtIdx
             });
         }
     }
 
     return {
         bestValueIncreases: bestValueIncreases
-            .sort((a,b) => b.fundMultiplierAtIdx - a.fundMultiplierAtIdx),
+            .sort((a,b) => b.fundReturn - a.fundReturn),
         totalReturn: totalReturn
     };
 }

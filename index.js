@@ -8,6 +8,7 @@
 
 const Promise = require('bluebird');
 const cprint = require('color-print');
+const minimist = require('minimist');
 
 require('./lib/date');
 const config = require('./lib/config');
@@ -20,7 +21,9 @@ const sync = require('./lib/sync');
 // Constants:
 // ******************************
 
-const DRY_RUN = false;
+const g_ARGV = minimist(process.argv.slice(2));
+
+const DRY_RUN = g_ARGV['dry-run'];
 const INVESTMENT_AMOUNT = 1000;
 const BUY_SCORE_THRESHOLD = 0.6;
 const MIN_FUND_ALOCATION = 5;
@@ -29,8 +32,39 @@ const EXPLORATORY_RATIO = 0.5;
 
 // ******************************
 
+function _printHeader (in_title, in_indent, in_backgroundFn, in_foregroundFn) {
+    in_indent = in_indent || '';
+    print.out('\n');
+    print.out(in_indent);
+    in_backgroundFn(in_foregroundFn(' '.repeat(in_title.length + 4), true));
+    print.out(in_indent);
+    in_backgroundFn(in_foregroundFn('  ' + in_title + '  ', true));
+    print.out(in_indent);
+    in_backgroundFn(in_foregroundFn(' '.repeat(in_title.length + 4), true));
+    print.out('\n');
+}
+
+// ******************************
+
+function _printTitleHeader (in_title, in_indent) {
+    _printHeader(in_title, in_indent, cprint.backgroundMagenta, cprint.toWhite);
+}
+
+// ******************************
+
+function _printSectionHeader (in_title, in_indent) {
+    _printHeader(in_title, in_indent, cprint.backgroundCyan, cprint.toWhite);
+}
+
+// ******************************
+
 sync.runGenerator(function*() {
-    print.heading('sharesies');
+    _printTitleHeader('SHARESIES');
+
+    if (DRY_RUN) {
+        cprint.white('Dry Run!');
+    }
+
     cprint.cyan('Loading...');
 
     if (!config.get('username')) {
@@ -61,24 +95,28 @@ sync.runGenerator(function*() {
         })
         .sort((a, b) => a.info.score - b.info.score);
 
+    let sortedFundsBySell = sortedFunds
+        .filter(fundInfo => fundInfo.info.score < BUY_SCORE_THRESHOLD);
+
+    if (sortedFundsBySell.length) {
+        print.line();
+        _printSectionHeader('Sell Scores');
+
+        sortedFundsBySell
+            .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
+    }
+
     let sortedFundsByBuy = sortedFunds
         .filter(fundInfo => fundInfo.info.score >= BUY_SCORE_THRESHOLD)
         .reverse();
 
-    let sortedFundsBySell = sortedFunds
-        .filter(fundInfo => fundInfo.info.score < BUY_SCORE_THRESHOLD);
+    if (sortedFundsByBuy.length) {
+        print.line();
+        _printSectionHeader('Buy Scores');
 
-    print.line();
-    print.heading('sell scores');
-
-    sortedFundsBySell
-        .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
-
-    print.line();
-    print.heading('buy scores');
-
-    sortedFundsByBuy
-        .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
+        sortedFundsByBuy
+            .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
+    }
 
     let sharesiesInfo = yield sharesies.getInfo();
     let sharesiesStats = yield sharesies.getStats(user);
@@ -114,7 +152,8 @@ sync.runGenerator(function*() {
 
     exploratoryInvestmentBalance = exploratoryInvestmentBalance * exploratoryInvestmentScore;
 
-    print.line();
+    _printSectionHeader('Actions & Summary');
+
     print.heading('Investment Split');
     print.info(`Using $${exploratoryInvestmentBalance} for exploratory investment`);
     print.info(`Keeping $${diversificationInvestmentBalance} for diversification investment`);

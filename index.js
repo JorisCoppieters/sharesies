@@ -11,7 +11,7 @@ const cprint = require('color-print');
 const minimist = require('minimist');
 
 require('./lib/date');
-const config = require('./lib/config');
+const credentials = require('./lib/credentials');
 const print = require('./lib/print');
 const readline = require('./lib/readline');
 const sharesies = require('./lib/sharesies');
@@ -58,6 +58,17 @@ function _printSectionHeader (in_title, in_indent) {
 
 // ******************************
 
+function _printActionsHeader (in_title, in_indent) {
+    let lightGreenBackgroundFn = cprint.backgroundLightGreen;
+    let isWin = process.platform === 'win32';
+    if (!isWin) {
+        lightGreenBackgroundFn = cprint.backgroundGreen;
+    }
+    _printHeader(in_title, in_indent, lightGreenBackgroundFn, cprint.toBlack);
+}
+
+// ******************************
+
 sync.runGenerator(function*() {
     _printTitleHeader('SHARESIES');
 
@@ -67,19 +78,25 @@ sync.runGenerator(function*() {
 
     cprint.cyan('Loading...');
 
-    if (!config.get('username')) {
-        config.set('username', readline.sync('Please enter your username: '));
+    if (!credentials.get('username')) {
+        credentials.set('username', readline.sync('Please enter your username: '));
     }
-    if (!config.get('password')) {
-        config.set('password', readline.sync('Please enter your password: '));
+    if (!credentials.get('password')) {
+        credentials.set('password', readline.sync('Please enter your password: '));
     }
 
     let loginData = yield sharesies.login(
-        config.get('username'),
-        config.get('password')
+        credentials.get('username'),
+        credentials.get('password')
     );
 
+    credentials.save();
+
     let user = loginData.user;
+
+    let sharesiesInfo = yield sharesies.getInfo();
+    let sharesiesStats = yield sharesies.getStats(user);
+    let sharesiesTransactions = yield sharesies.getTransactions(user);
 
     let funds = yield sharesies.getFundsCleaned();
     let marketPricesAverage = sharesies.getMarketPricesAverage(funds);
@@ -98,7 +115,6 @@ sync.runGenerator(function*() {
         .filter(fundInfo => fundInfo.info.score < BUY_SCORE_THRESHOLD);
 
     if (sortedFundsBySell.length) {
-        print.line();
         _printSectionHeader('Sell Scores');
 
         sortedFundsBySell
@@ -117,12 +133,8 @@ sync.runGenerator(function*() {
             .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
     }
 
-    let sharesiesInfo = yield sharesies.getInfo();
-    let sharesiesStats = yield sharesies.getStats(user);
-    let sharesiesTransactions = yield sharesies.getTransactions(user);
-
     let walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
-    let portfolioBalance = parseFloat(sharesiesStats.total_portfolio);
+    let portfolioBalance = parseFloat(sharesiesStats.total_portfolio) - parseFloat(sharesiesStats.total_withdrawals);
 
     let sellingSharesValue = sharesiesInfo.orders
         .filter(order => order.type === 'sell')
@@ -150,45 +162,46 @@ sync.runGenerator(function*() {
     let diversificationInvestmentBalance = investmentBalance - exploratoryInvestmentBalance;
     exploratoryInvestmentBalance = exploratoryInvestmentBalance * exploratoryInvestmentScore;
 
-    _printSectionHeader('Actions & Summary');
+    let remainingBalance = investmentBalance - diversificationInvestmentBalance - exploratoryInvestmentBalance;
 
-    print.heading('Investment Split');
-    print.info(`Using $${exploratoryInvestmentBalance.toFixed(2)} for exploratory investment`);
-    print.info(`Keeping $${diversificationInvestmentBalance.toFixed(2)} for diversification investment`);
+    _printSectionHeader('Investment Split');
+    let exploratoryBallanceStr = cprint.toYellow('$' + exploratoryInvestmentBalance.toFixed(2));
+    let diversificationBallanceStr = cprint.toGreen('$' + diversificationInvestmentBalance.toFixed(2));
+    let remainingBalanceStr = cprint.toCyan('<--') + ' ' + cprint.toWhite('$' + remainingBalance.toFixed(2)) + ' ' + cprint.toCyan('-->');
+    print.info(`${cprint.toYellow('Exploratory')} ${exploratoryBallanceStr} ${remainingBalanceStr} ${diversificationBallanceStr} ${cprint.toGreen('Diversification')}`);
 
-    print.line();
-    print.heading('actions for buying');
-
+    if (exploratoryInvestmentBalance > 0) {
+        _printActionsHeader('Actions for buying');
+    }
     let fundsAllocated = yield buyShares(user, sharesiesInfo, exploratoryInvestmentBalance, walletBalance, sortedFundsByBuy);
     if (fundsAllocated.boughtNew) {
-        yield sharesies.confirmCart(user, config.get('password')).then(data => {
+        yield sharesies.confirmCart(user, credentials.get('password')).then(data => {
             print.errors(data);
             return Promise.resolve(true);
         });
     }
 
-    print.line();
-    print.heading('actions for selling');
-
     let fundsFound = fundsAllocated.totalValue + sellingSharesValue;
     let fundsSaleAllocation = Math.max(0, exploratoryInvestmentBalance - fundsFound);
 
-    if (exploratoryInvestmentBalance <= 0) {
-        print.info('No balance to invest');
-    } else if (fundsSaleAllocation > 0) {
-        if (fundsSaleAllocation < 100) {
-            print.info(`Found only $${fundsFound.toFixed(2)} for exploratory investment, but that is close enough`);
-            yield sellShares(user, sharesiesInfo, sortedFunds, 0);
-            sharesiesInfo = yield sharesies.getInfo();
+    if (exploratoryInvestmentBalance > 0) {
+        _printActionsHeader('Actions for selling');
+
+        if (fundsSaleAllocation > 0) {
+            if (fundsSaleAllocation < 100) {
+                print.info(`Found only $${fundsFound.toFixed(2)} for exploratory investment, but that is close enough`);
+                yield sellShares(user, sharesiesInfo, sortedFunds, 0);
+                sharesiesInfo = yield sharesies.getInfo();
+            } else {
+                print.info(`Found only $${fundsFound.toFixed(2)} for exploratory investment, so need to sell $${fundsSaleAllocation.toFixed(2)} for further exploratory investment`);
+                yield sellShares(user, sharesiesInfo, sortedFunds, fundsSaleAllocation);
+                sharesiesInfo = yield sharesies.getInfo();
+            }
+        } else if (sellingSharesValue) {
+            print.info(`Found all $${fundsFound.toFixed(2)} for exploratory investment (including selling $${sellingSharesValue.toFixed(2)}), no need to sell more`);
         } else {
-            print.info(`Found only $${fundsFound.toFixed(2)} for exploratory investment, so need to sell $${fundsSaleAllocation.toFixed(2)} for further exploratory investment`);
-            yield sellShares(user, sharesiesInfo, sortedFunds, fundsSaleAllocation);
-            sharesiesInfo = yield sharesies.getInfo();
+            print.info(`Found all $${fundsFound.toFixed(2)} for exploratory investment, no need to sell`);
         }
-    } else if (sellingSharesValue) {
-        print.info(`Found all $${fundsFound.toFixed(2)} for exploratory investment (including selling $${sellingSharesValue.toFixed(2)}), no need to sell more`);
-    } else {
-        print.info(`Found all $${fundsFound.toFixed(2)} for exploratory investment, no need to sell`);
     }
 
     let daysAgo = 7;
@@ -232,20 +245,20 @@ sync.runGenerator(function*() {
         lightYellowFn = cprint.toYellow;
     }
 
-    let totalReturn = parseFloat(sharesiesStats.total_portfolio) + parseFloat(sharesiesStats.total_withdrawals) - parseFloat(sharesiesStats.total_deposits);
+    let totalReturn = parseFloat(sharesiesStats.total_portfolio) - parseFloat(sharesiesStats.total_deposits);
+    let totalInvested = parseFloat(sharesiesStats.total_portfolio) - parseFloat(sharesiesStats.total_withdrawals);
 
-    print.line();
-    print.heading('summary');
+    _printSectionHeader('Summary');
     print.info(`Wallet Balance: ${cprint.toGreen('$' + walletBalance.toFixed(2))}`);
     print.info(`Buying Shares: ${cprint.toGreen('$' + purchaseSharesValue.toFixed(2))}`);
     print.info(`Selling Shares: ${cprint.toRed('$' + sellingSharesValue.toFixed(2))}`);
     print.line();
     print.info(`Total Deposits: ${cprint.toGreen('$' + parseFloat(sharesiesStats.total_deposits).toFixed(2))}`);
     print.info(`Total Withdrawals: ${cprint.toRed('$' + parseFloat(sharesiesStats.total_withdrawals).toFixed(2))}`);
-    print.info(`Total Value: ${cprint.toCyan('$' + parseFloat(sharesiesStats.total_portfolio).toFixed(2))}`);
+    print.info(`Total Invested: ${cprint.toCyan('$' + totalInvested.toFixed(2))}`);
     print.info(`Total Return: ${lightGreenFn('$' + totalReturn.toFixed(2))}`);
-    print.line();
-    print.heading('investment strategy (last 2 weeks)');
+
+    _printSectionHeader('Investment strategy (last 2 weeks)');
     print.info(`Invested value increases: ${lightBlueFn('=> ' + investmentFundGainCodes)}`);
     print.info(`Invested value decreases: ${lightYellowFn('=> ' + investmentFundLossCodes)}`);
     print.info(`Best value increases:     ${lightBlueFn('=> ' + maxInvestmentFundCodes)}`);

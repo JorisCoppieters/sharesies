@@ -11,7 +11,7 @@ const path = require('path');
 const vega = require('vega');
 
 require('./lib/date');
-const config = require('./lib/config');
+const credentials = require('./lib/credentials');
 const exec = require('./lib/exec');
 const readline = require('./lib/readline');
 const sharesies = require('./lib/sharesies');
@@ -27,16 +27,16 @@ const BUY_SCORE_THRESHOLD = 0.5;
 // ******************************
 
 sync.runGenerator(function*() {
-    if (!config.get('username')) {
-        config.set('username', readline.sync('Please enter your username: '));
+    if (!credentials.get('username')) {
+        credentials.set('username', readline.sync('Please enter your username: '));
     }
-    if (!config.get('password')) {
-        config.set('password', readline.sync('Please enter your password: '));
+    if (!credentials.get('password')) {
+        credentials.set('password', readline.sync('Please enter your password: '));
     }
 
     yield sharesies.login(
-        config.get('username'),
-        config.get('password')
+        credentials.get('username'),
+        credentials.get('password')
     );
 
     let funds = yield sharesies.getFundsCleaned();

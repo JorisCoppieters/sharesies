@@ -134,7 +134,7 @@ sync.runGenerator(function*() {
     }
 
     let walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
-    let portfolioBalance = parseFloat(sharesiesStats.total_portfolio) - parseFloat(sharesiesStats.total_withdrawals);
+    let portfolioBalance = parseFloat(sharesiesStats.total_portfolio);
 
     let sellingSharesValue = sharesiesInfo.orders
         .filter(order => order.type === 'sell')
@@ -245,8 +245,8 @@ sync.runGenerator(function*() {
         lightYellowFn = cprint.toYellow;
     }
 
-    let totalReturn = parseFloat(sharesiesStats.total_portfolio) - parseFloat(sharesiesStats.total_deposits);
-    let totalInvested = parseFloat(sharesiesStats.total_portfolio) - parseFloat(sharesiesStats.total_withdrawals);
+    let totalReturn = parseFloat(sharesiesStats.total_portfolio) - parseFloat(sharesiesStats.total_deposits) + parseFloat(sharesiesStats.total_withdrawals);
+    let totalInvested = parseFloat(sharesiesStats.total_portfolio);
 
     _printSectionHeader('Summary');
     print.info(`Wallet Balance: ${cprint.toGreen('$' + walletBalance.toFixed(2))}`);

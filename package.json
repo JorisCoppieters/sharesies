@@ -1,6 +1,6 @@
 {
   "name": "sharesies",
-  "version": "1.1.17",
+  "version": "1.1.18",
   "description": "A tool for recommending sharesies investments",
   "main": "index.js",
   "bin": {
@@ -28,9 +28,9 @@
   },
   "homepage": "https://github.com/JorisCoppieters/sharesies#readme",
   "dependencies": {
-    "bluebird": "^3.5.2",
+    "bluebird": "^3.5.3",
     "color-print": "^1.0.2",
-    "deasync": "^0.1.13",
+    "deasync": "^0.1.14",
     "request": "^2.88.0",
     "vega": "^3.3.1"
   }

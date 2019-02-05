@@ -23,7 +23,9 @@ const sync = require('./lib/sync');
 
 const g_ARGV = minimist(process.argv.slice(2));
 
+const DEBUG = g_ARGV['d'];
 const EXECUTE = g_ARGV['e'];
+const CLEAR_CACHE = g_ARGV['c'];
 const INVESTMENT_AMOUNT = 1000;
 const BUY_SCORE_THRESHOLD = 0.6;
 const MIN_FUND_ALOCATION = 5;
@@ -94,6 +96,10 @@ sync.runGenerator(function*() {
 
     let user = loginData.user;
 
+    if (CLEAR_CACHE) {
+        sharesies.clearCache();
+    }
+
     let sharesiesInfo = yield sharesies.getInfo();
     let sharesiesStats = yield sharesies.getStats(user);
     let sharesiesTransactions = yield sharesies.getTransactions(user);
@@ -160,9 +166,22 @@ sync.runGenerator(function*() {
         .reduce((scoreSum, score) => scoreSum + score, 0) / sortedFundsByBuy.length : 0;
 
     let diversificationInvestmentBalance = investmentBalance - exploratoryInvestmentBalance;
-    exploratoryInvestmentBalance = exploratoryInvestmentBalance * exploratoryInvestmentScore;
+    exploratoryInvestmentBalance = exploratoryInvestmentBalance * Math.min(1, exploratoryInvestmentScore);
 
     let remainingBalance = investmentBalance - diversificationInvestmentBalance - exploratoryInvestmentBalance;
+
+    _debug(`Investment Balance: ${investmentBalance}`);
+    _debug(`Wallaet Balance: ${walletBalance}`);
+    _debug(`Portfolio Balance: ${portfolioBalance}`);
+    _debug(`Purchase Shares Balance: ${purchaseSharesValue}`);
+    _debug(`Exploratory Investment Balance: ${exploratoryInvestmentBalance}`);
+    _debug(`Exploratory Investment Score: ${exploratoryInvestmentScore}`);
+    _debug(`Diversification Investment Balance: ${diversificationInvestmentBalance}`);
+    _debug(`Remaining Balance: ${remainingBalance}`);
+
+    if (remainingBalance < 0) {
+        throw new Error('Remaining balance cannot be negative');
+    }
 
     _printSectionHeader('Investment Split');
     let exploratoryBallanceStr = cprint.toYellow('$' + exploratoryInvestmentBalance.toFixed(2));
@@ -189,18 +208,18 @@ sync.runGenerator(function*() {
 
         if (fundsSaleAllocation > 0) {
             if (fundsSaleAllocation < 100) {
-                print.info(`Found only $${fundsFound.toFixed(2)} for exploratory investment, but that is close enough`);
+                print.info(`Allocated $${fundsFound.toFixed(2)} for exploratory investment, so that is close enough, no need to sell anything`);
                 yield sellShares(user, sharesiesInfo, sortedFunds, 0);
                 sharesiesInfo = yield sharesies.getInfo();
             } else {
-                print.info(`Found only $${fundsFound.toFixed(2)} for exploratory investment, so need to sell $${fundsSaleAllocation.toFixed(2)} for further exploratory investment`);
+                print.info(`Allocated only $${fundsFound.toFixed(2)} for exploratory investment, so need to sell $${fundsSaleAllocation.toFixed(2)} for further exploratory investment`);
                 yield sellShares(user, sharesiesInfo, sortedFunds, fundsSaleAllocation);
                 sharesiesInfo = yield sharesies.getInfo();
             }
         } else if (sellingSharesValue) {
-            print.info(`Found all $${fundsFound.toFixed(2)} for exploratory investment (including selling $${sellingSharesValue.toFixed(2)}), no need to sell more`);
+            print.info(`Allocated more than enough $${fundsFound.toFixed(2)} for exploratory investment (including selling $${sellingSharesValue.toFixed(2)}), no need to sell more`);
         } else {
-            print.info(`Found all $${fundsFound.toFixed(2)} for exploratory investment, no need to sell`);
+            print.info(`Allocated more than enough $${fundsFound.toFixed(2)} for exploratory investment, no need to sell`);
         }
     }
 
@@ -290,6 +309,8 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
         boughtNew: false
     };
 
+    _debug(`Exploratory Buy Allocation: ${exploratoryBuyAllocation}`);
+
     return sharesies.clearCart(user)
         .then(sortedFunds
             .sort((a, b) => b.info.score - a.info.score)
@@ -308,6 +329,14 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
 
                 let currentSharesValue = currentSharesAmount * sharePrice;
                 let desiredSharesAmount = desiredFundAllocation / sharePrice;
+
+                _debug(`Fund: ${fundInfo.fund.code}`);
+                _debug(`Fund Distribution Score: ${fundsDistribution[idx]}`);
+                _debug(`Desired Allocation: ${desiredFundAllocation}`);
+                _debug(`Share Price: ${sharePrice}`);
+                _debug(`Current Shares: ${currentSharesAmount}`);
+                _debug(`Current Shares Value: ${currentSharesValue}`);
+                _debug(`Desired Shares: ${desiredSharesAmount}`);
 
                 if (desiredSharesAmount <= currentSharesAmount) {
                     fundsAllocated.totalValue += desiredFundAllocation;
@@ -332,7 +361,7 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
                     return;
                 }
 
-                let sharesAmountToBuy = Math.ceil(fundAllocation / sharePrice);
+                let sharesAmountToBuy = Math.floor(fundAllocation / sharePrice);
                 fundAllocation = sharesAmountToBuy * sharePrice;
 
                 fundsAllocated.totalValue += fundAllocation;
@@ -346,6 +375,7 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
                 } else {
                     return sharesies.addCartItem(user, fundInfo.fund, fundAllocation).then(data => {
                         print.errors(data);
+                        sharesies.clearCache();
                         return Promise.resolve(true);
                     });
                 }
@@ -375,6 +405,10 @@ function sellShares(user, sharesiesInfo, sortedFunds, exploratorySellAllocation)
             let sharePrice = fundInfo.info.currentPrice;
             let sharesValue = sharesAmount * sharePrice;
 
+            if (totalSoldValue >= exploratorySellAllocation) {
+                return;
+            }
+
             if (fundInfo.info.score < BUY_SCORE_THRESHOLD) {
                 if (sharesValue <= 200) {
                     return;
@@ -383,10 +417,6 @@ function sellShares(user, sharesiesInfo, sortedFunds, exploratorySellAllocation)
                 sharesAmount = Math.max(1, (sharesValue - 200) / sharePrice);
                 sharesValue = sharesAmount * sharePrice;
             } else {
-                if (totalSoldValue >= exploratorySellAllocation) {
-                    return;
-                }
-
                 let maxSaleValue = Math.min(exploratorySellAllocation - totalSoldValue, sharesValue - 200);
                 if (maxSaleValue <= 0) {
                     return;
@@ -406,6 +436,7 @@ function sellShares(user, sharesiesInfo, sortedFunds, exploratorySellAllocation)
             } else {
                 return sharesies.sellFund(user, fundInfo.fund, numberRound(sharesAmount)).then(data => {
                     print.errors(data);
+                    sharesies.clearCache();
                     return Promise.resolve(true);
                 });
             }
@@ -584,6 +615,14 @@ function getMaxInvestmentStrategy(sortedFunds, daysAgo) {
 
 function numberRound(in_number) {
     return Math.round(in_number);
+}
+
+// ******************************
+
+function _debug(in_message) {
+    if (DEBUG) {
+        process.stdout.write(cprint.toWhite(`*** DEBUG *** ${in_message}\n`));
+    }
 }
 
 // ******************************

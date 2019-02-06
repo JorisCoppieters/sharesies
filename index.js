@@ -3,6 +3,12 @@
 'use strict'; // JS: ES6
 
 // ******************************
+//
+// SHARESIES v1.1.19
+//
+// ******************************
+
+// ******************************
 // Requires:
 // ******************************
 
@@ -11,7 +17,9 @@ const cprint = require('color-print');
 const minimist = require('minimist');
 
 require('./lib/date');
+const config = require('./lib/config');
 const credentials = require('./lib/credentials');
+const help = require('./lib/help');
 const print = require('./lib/print');
 const readline = require('./lib/readline');
 const sharesies = require('./lib/sharesies');
@@ -26,6 +34,8 @@ const g_ARGV = minimist(process.argv.slice(2));
 const DEBUG = g_ARGV['d'];
 const EXECUTE = g_ARGV['e'];
 const CLEAR_CACHE = g_ARGV['c'];
+const HELP = g_ARGV['h'];
+const VERSION = g_ARGV['v'];
 const INVESTMENT_AMOUNT = 1000;
 const BUY_SCORE_THRESHOLD = 0.6;
 const MIN_FUND_ALOCATION = 5;
@@ -34,48 +44,28 @@ const EXPLORATORY_RATIO = 0.5;
 
 // ******************************
 
-function _printHeader (in_title, in_indent, in_backgroundFn, in_foregroundFn) {
-    in_indent = in_indent || '';
-    print.out('\n');
-    print.out(in_indent);
-    in_backgroundFn(in_foregroundFn(' '.repeat(in_title.length + 4), true));
-    print.out(in_indent);
-    in_backgroundFn(in_foregroundFn('  ' + in_title + '  ', true));
-    print.out(in_indent);
-    in_backgroundFn(in_foregroundFn(' '.repeat(in_title.length + 4), true));
-    print.out('\n');
-}
-
-// ******************************
-
-function _printTitleHeader (in_title, in_indent) {
-    _printHeader(in_title, in_indent, cprint.backgroundMagenta, cprint.toWhite);
-}
-
-// ******************************
-
-function _printSectionHeader (in_title, in_indent) {
-    _printHeader(in_title, in_indent, cprint.backgroundCyan, cprint.toWhite);
-}
-
-// ******************************
-
-function _printActionsHeader (in_title, in_indent) {
-    let lightGreenBackgroundFn = cprint.backgroundLightGreen;
-    let isWin = process.platform === 'win32';
-    if (!isWin) {
-        lightGreenBackgroundFn = cprint.backgroundGreen;
-    }
-    _printHeader(in_title, in_indent, lightGreenBackgroundFn, cprint.toBlack);
-}
-
-// ******************************
-
 sync.runGenerator(function*() {
     _printTitleHeader('SHARESIES');
 
+    if (HELP) {
+        help.printHelp();
+        return;
+    }
+
+    if (VERSION) {
+        help.printVersion();
+        return;
+    }
+
     if (!EXECUTE) {
-        cprint.white('Dry Run!');
+        cprint.white('Dry Run! (Use the -e option to execute the buying and selling suggestions)');
+    }
+
+    if (DEBUG) {
+        config.api.debugRequestUrl = true;
+        config.api.debugRequestData = true;
+        config.api.debugResponseData = true;
+        config.api.debugResult = true;
     }
 
     cprint.cyan('Loading...');
@@ -171,7 +161,7 @@ sync.runGenerator(function*() {
     let remainingBalance = investmentBalance - diversificationInvestmentBalance - exploratoryInvestmentBalance;
 
     _debug(`Investment Balance: ${investmentBalance}`);
-    _debug(`Wallaet Balance: ${walletBalance}`);
+    _debug(`Wallet Balance: ${walletBalance}`);
     _debug(`Portfolio Balance: ${portfolioBalance}`);
     _debug(`Purchase Shares Balance: ${purchaseSharesValue}`);
     _debug(`Exploratory Investment Balance: ${exploratoryInvestmentBalance}`);
@@ -340,12 +330,12 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
 
                 if (desiredSharesAmount <= currentSharesAmount) {
                     fundsAllocated.totalValue += desiredFundAllocation;
-                    print.info(`Already have ${numberRound(desiredSharesAmount)} shares ($${desiredFundAllocation.toFixed(2)}) for ${fundInfo.fund.code}, no more desired`);
+                    print.info(`Already have ${_numberRound(desiredSharesAmount)} shares ($${desiredFundAllocation.toFixed(2)}) for ${fundInfo.fund.code}, no more desired`);
                     return;
                 }
 
                 if (currentSharesAmount) {
-                    print.info(`Already have ${numberRound(currentSharesAmount)} shares ($${currentSharesValue.toFixed(2)}) for ${fundInfo.fund.code} but investing more...`);
+                    print.info(`Already have ${_numberRound(currentSharesAmount)} shares ($${currentSharesValue.toFixed(2)}) for ${fundInfo.fund.code} but investing more...`);
                 }
 
                 fundsAllocated.totalValue += currentSharesValue;
@@ -362,17 +352,17 @@ function buyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance,
                 }
 
                 let sharesAmountToBuy = Math.floor(fundAllocation / sharePrice);
-                fundAllocation = sharesAmountToBuy * sharePrice;
+                fundAllocation = Math.round(sharesAmountToBuy * sharePrice * 100) / 100;
 
                 fundsAllocated.totalValue += fundAllocation;
 
-                print.action(`=> Auto investing ${numberRound(sharesAmountToBuy)} shares ($${fundAllocation.toFixed(2)}) into ${fundInfo.fund.code}`);
+                print.action(`=> Auto investing ${_numberRound(sharesAmountToBuy)} shares ($${fundAllocation.toFixed(2)}) into ${fundInfo.fund.code}`);
                 availableFundAllocation -= fundAllocation;
-                fundsAllocated.boughtNew = true;
 
                 if (!EXECUTE) {
                     return Promise.resolve();
                 } else {
+                    fundsAllocated.boughtNew = true;
                     return sharesies.addCartItem(user, fundInfo.fund, fundAllocation).then(data => {
                         print.errors(data);
                         sharesies.clearCache();
@@ -428,13 +418,13 @@ function sellShares(user, sharesiesInfo, sortedFunds, exploratorySellAllocation)
                 }
             }
 
-            print.action(`=> Auto selling ${numberRound(sharesAmount)} shares ($${sharesValue.toFixed(2)}) for ${fundInfo.fund.code}`);
+            print.action(`=> Auto selling ${_numberRound(sharesAmount)} shares ($${sharesValue.toFixed(2)}) for ${fundInfo.fund.code}`);
             totalSoldValue += sharesValue;
 
             if (!EXECUTE) {
                 return Promise.resolve();
             } else {
-                return sharesies.sellFund(user, fundInfo.fund, numberRound(sharesAmount)).then(data => {
+                return sharesies.sellFund(user, fundInfo.fund, _numberRound(sharesAmount)).then(data => {
                     print.errors(data);
                     sharesies.clearCache();
                     return Promise.resolve(true);
@@ -612,9 +602,48 @@ function getMaxInvestmentStrategy(sortedFunds, daysAgo) {
 }
 
 // ******************************
+// Helper Functions:
+// ******************************
 
-function numberRound(in_number) {
+function _numberRound(in_number) {
     return Math.round(in_number);
+}
+
+// ******************************
+
+function _printHeader (in_title, in_indent, in_backgroundFn, in_foregroundFn) {
+    in_indent = in_indent || '';
+    print.out('\n');
+    print.out(in_indent);
+    in_backgroundFn(in_foregroundFn(' '.repeat(in_title.length + 4), true));
+    print.out(in_indent);
+    in_backgroundFn(in_foregroundFn('  ' + in_title + '  ', true));
+    print.out(in_indent);
+    in_backgroundFn(in_foregroundFn(' '.repeat(in_title.length + 4), true));
+    print.out('\n');
+}
+
+// ******************************
+
+function _printTitleHeader (in_title, in_indent) {
+    _printHeader(in_title, in_indent, cprint.backgroundMagenta, cprint.toWhite);
+}
+
+// ******************************
+
+function _printSectionHeader (in_title, in_indent) {
+    _printHeader(in_title, in_indent, cprint.backgroundCyan, cprint.toWhite);
+}
+
+// ******************************
+
+function _printActionsHeader (in_title, in_indent) {
+    let lightGreenBackgroundFn = cprint.backgroundLightGreen;
+    let isWin = process.platform === 'win32';
+    if (!isWin) {
+        lightGreenBackgroundFn = cprint.backgroundGreen;
+    }
+    _printHeader(in_title, in_indent, lightGreenBackgroundFn, cprint.toBlack);
 }
 
 // ******************************

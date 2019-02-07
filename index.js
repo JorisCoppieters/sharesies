@@ -107,16 +107,6 @@ sync.runGenerator(function*() {
         })
         .sort((a, b) => a.info.score - b.info.score);
 
-    let sortedFundsBySell = sortedFunds
-        .filter(fundInfo => fundInfo.info.score < BUY_SCORE_THRESHOLD);
-
-    if (sortedFundsBySell.length) {
-        _printSectionHeader('Sell Scores');
-
-        sortedFundsBySell
-            .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
-    }
-
     let sortedFundsByBuy = sortedFunds
         .filter(fundInfo => fundInfo.info.score >= BUY_SCORE_THRESHOLD)
         .reverse();
@@ -126,6 +116,16 @@ sync.runGenerator(function*() {
         _printSectionHeader('Buy Scores');
 
         sortedFundsByBuy
+            .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
+    }
+
+    let sortedFundsBySell = sortedFunds
+        .filter(fundInfo => fundInfo.info.score < BUY_SCORE_THRESHOLD);
+
+    if (sortedFundsBySell.length) {
+        _printSectionHeader('Sell Scores');
+
+        sortedFundsBySell
             .forEach(fundInfo => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
     }
 
@@ -233,6 +233,7 @@ sync.runGenerator(function*() {
     let investmentFundLossCodes = investmentStrategy.worstValueIncreases
         .filter(fund => fund.fundCode !== 'NONE')
         .filter((_, idx) => idx < 3)
+        .filter(fund => fund.fundMultiplierAtIdx < 1)
         .map(fund => fund.fundCode + ` (x${parseInt(fund.fundMultiplierAtIdx * 1000) / 1000})`)
         .join(', ');
 

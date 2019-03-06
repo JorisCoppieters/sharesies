@@ -137,7 +137,9 @@ sync.runGenerator(function*() {
         .map(order => {
             let fund = funds
                 .find(fund => fund.id === order['fund_id']);
-
+            if (!fund) {
+                return 0; // Selling a filtered out fund
+            }
             return order['shares'] * fund.market_price;
         })
         .reduce((total, amount) => total + parseFloat(amount), 0);

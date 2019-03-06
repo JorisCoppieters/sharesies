@@ -18,15 +18,29 @@ function update_version {
     OLD_VERSION_MINOR=$(echo $OLD_VERSION | awk 'BEGIN{FS="."}{print $2}');
     OLD_VERSION_BUG=$(echo $OLD_VERSION | awk 'BEGIN{FS="."}{print $3}');
 
-    NEW_VERSION_MAJOR=$OLD_VERSION_MAJOR;
-    NEW_VERSION_MINOR=$OLD_VERSION_MINOR;
-    NEW_VERSION_BUG=$(echo "$OLD_VERSION_BUG" + 1 | bc);
+    if [[ "$1" -eq "m" ]]; then
+      NEW_VERSION_MAJOR=$OLD_VERSION_MAJOR;
+      NEW_VERSION_MINOR=$(echo "$OLD_VERSION_MINOR" + 1 | bc);
+      NEW_VERSION_BUG="0";
+    elif [[ "$1" -eq "M" ]]; then
+      NEW_VERSION_MAJOR=$(echo "$OLD_VERSION_MAJOR" + 1 | bc);
+      NEW_VERSION_MINOR="0";
+      NEW_VERSION_BUG="0";
+    else
+      NEW_VERSION_MAJOR=$OLD_VERSION_MAJOR;
+      NEW_VERSION_MINOR=$OLD_VERSION_MINOR;
+      NEW_VERSION_BUG=$(echo "$OLD_VERSION_BUG" + 1 | bc);
+    fi
+
     NEW_VERSION="$NEW_VERSION_MAJOR.$NEW_VERSION_MINOR.$NEW_VERSION_BUG";
 
     echo $NEW_VERSION
 }
 
 VERSION=$(update_version)
+if [[ "$1" -eq "m" ]]; then
+  VERSION=$(update_version "m")
+fi
 
 if [[ `ask "Do you want to publish $VERSION?" && echo true` == true ]]; then
   echo "Updating version number in files..."

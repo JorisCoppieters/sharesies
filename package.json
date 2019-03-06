@@ -4,9 +4,7 @@
   "description": "A tool for recommending sharesies investments",
   "main": "index.js",
   "bin": {
-    "sharesies": "./index.js",
-    "sharesies-buy-graph": "./line-chart-buy.js",
-    "sharesies-sell-graph": "./line-chart-sell.js"
+    "sharesies": "./index.js"
   },
   "directories": {
     "lib": "lib"
@@ -31,7 +29,7 @@
     "bluebird": "^3.5.3",
     "color-print": "^1.0.2",
     "deasync": "^0.1.14",
-    "request": "^2.88.0",
-    "vega": "^3.3.1"
+    "minimist": "^1.2.0",
+    "request": "^2.88.0"
   }
 }

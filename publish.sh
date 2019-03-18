@@ -18,11 +18,11 @@ function update_version {
     OLD_VERSION_MINOR=$(echo $OLD_VERSION | awk 'BEGIN{FS="."}{print $2}');
     OLD_VERSION_BUG=$(echo $OLD_VERSION | awk 'BEGIN{FS="."}{print $3}');
 
-    if [[ "$1" -eq "m" ]]; then
+    if [[ "$1" == "m" ]]; then
       NEW_VERSION_MAJOR=$OLD_VERSION_MAJOR;
       NEW_VERSION_MINOR=$(echo "$OLD_VERSION_MINOR" + 1 | bc);
       NEW_VERSION_BUG="0";
-    elif [[ "$1" -eq "M" ]]; then
+    elif [[ "$1" == "M" ]]; then
       NEW_VERSION_MAJOR=$(echo "$OLD_VERSION_MAJOR" + 1 | bc);
       NEW_VERSION_MINOR="0";
       NEW_VERSION_BUG="0";
@@ -38,13 +38,13 @@ function update_version {
 }
 
 VERSION=$(update_version)
-if [[ "$1" -eq "m" ]]; then
+if [[ "$1" == "m" ]]; then
   VERSION=$(update_version "m")
 fi
 
 if [[ `ask "Do you want to publish $VERSION?" && echo true` == true ]]; then
   echo "Updating version number in files..."
-  sed -i "s/\"version\": \".*\",/\"version\": \"$VERSION\",/g" package.json
+  sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/g" package.json
   sed -i "s/\/\/ SHARESIES v.*/\/\/ SHARESIES v$VERSION/g" index.js
   sed -i "s/const c_VERSION = '.*';/const c_VERSION = '$VERSION';/g" lib/constants.js
 

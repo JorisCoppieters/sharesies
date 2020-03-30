@@ -29,7 +29,7 @@
     "bluebird": "^3.5.3",
     "color-print": "^1.0.2",
     "deasync": "^0.1.14",
-    "minimist": "^1.2.0",
+    "minimist": "^1.2.3",
     "request": "^2.88.0"
   }
 }

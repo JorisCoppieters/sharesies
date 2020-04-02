@@ -90,9 +90,32 @@ sync.runGenerator(function*() {
         sharesies.clearCache();
     }
 
-    let sharesiesInfo = yield sharesies.getInfo();
-    let sharesiesStats = yield sharesies.getStats(user);
-    let sharesiesTransactions = yield sharesies.getTransactions(user);
+    let sharesiesInfo;
+    try {
+        sharesiesInfo = yield sharesies.getInfo();
+    } catch (e) {
+        cprint.red("Failed to get sharesies info:");
+        cprint.red(e);
+        return;
+    }
+
+    let sharesiesStats;
+    try {
+        sharesiesStats = yield sharesies.getStats(user);
+    } catch (e) {
+        cprint.red("Failed to get sharesies stats:");
+        cprint.red(e);
+        return;
+    }
+
+    let sharesiesTransactions;
+    try {
+        sharesiesTransactions = yield sharesies.getTransactions(user);
+    } catch (e) {
+        cprint.red("Failed to get sharesies transactions:");
+        cprint.red(e);
+        return;
+    }
 
     let funds = yield sharesies.getFundsCleaned();
     let marketPricesAverage = sharesies.getMarketPricesAverage(funds);

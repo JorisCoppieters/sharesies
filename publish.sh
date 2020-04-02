@@ -1,4 +1,5 @@
 #!/bin/bash
+source ~/.bashrc
 
 function ask {
   read -r -p "$@ [y/N] " response
@@ -48,13 +49,14 @@ if [[ `ask "Do you want to publish $VERSION?" && echo true` == true ]]; then
   sed -i "s/\/\/ SHARESIES v.*/\/\/ SHARESIES v$VERSION/g" index.js
   sed -i "s/const c_VERSION = '.*';/const c_VERSION = '$VERSION';/g" lib/constants.js
 
-  if [[ -e /usr/local/bin/npmme ]]; then
+  if [[ "$(type npmme)" == *"is a function"* ]]; then
     echo "Switching to correct npm..."
-    /usr/local/bin/npmme
+    npmme
   fi
 
   echo "Running npm publish..."
   npm publish
+
   echo "Tagging revision..."
   git add .
   git commit -m "Set version to $VERSION"

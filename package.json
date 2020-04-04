@@ -26,10 +26,10 @@
   },
   "homepage": "https://github.com/JorisCoppieters/sharesies#readme",
   "dependencies": {
-    "bluebird": "^3.5.3",
+    "bluebird": "^3.7.2",
     "color-print": "^1.0.2",
-    "deasync": "^0.1.14",
-    "minimist": "^1.2.3",
-    "request": "^2.88.0"
+    "deasync": "^0.1.19",
+    "minimist": "^1.2.5",
+    "request": "^2.88.2"
   }
 }

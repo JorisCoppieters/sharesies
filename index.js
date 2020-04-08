@@ -47,7 +47,7 @@ const MAX_FUNDS_FOR_BUY = 20;
 
 // ******************************
 
-sync.runGenerator(function*() {
+sync.runGenerator(function*() {try {
     _printTitleHeader('SHARESIES');
 
     if (HELP) {
@@ -93,32 +93,9 @@ sync.runGenerator(function*() {
         sharesies.clearCache();
     }
 
-    let sharesiesInfo;
-    try {
-        sharesiesInfo = yield sharesies.getInfo();
-    } catch (e) {
-        cprint.red("Failed to get sharesies info:");
-        cprint.red(e);
-        return;
-    }
-
-    let sharesiesStats;
-    try {
-        sharesiesStats = yield sharesies.getStats(user);
-    } catch (e) {
-        cprint.red("Failed to get sharesies stats:");
-        cprint.red(e);
-        return;
-    }
-
-    let sharesiesTransactions;
-    try {
-        sharesiesTransactions = yield sharesies.getTransactions(user);
-    } catch (e) {
-        cprint.red("Failed to get sharesies transactions:");
-        cprint.red(e);
-        return;
-    }
+    let sharesiesInfo = yield sharesies.getInfo();
+    let sharesiesStats = yield sharesies.getStats(user);
+    let sharesiesTransactions = yield sharesies.getTransactions(user);
 
     let funds = yield sharesies.getFundsCleaned();
     let marketPricesAverage = sharesies.getMarketPricesAverage(funds);
@@ -318,7 +295,14 @@ sync.runGenerator(function*() {
     print.info(`Best value increases: ${lightBlueFn(maxInvestmentFundCodes)}`);
     print.info(`Return (last 2 weeks): ${lightGreenFn('$' + investmentReturn.toFixed(2))}`);
     print.info(`Daily Return (last 2 weeks): ${lightGreenFn('$' + totalReturnsPerDay.toFixed(2))}`);
-});
+} catch  (e) {
+    cprint.red("Ended with errors:");
+    console.error(e.stack || e);
+    if (!e.stack) {
+        console.trace("Trace:");
+    }
+    return;
+}});
 
 // ******************************
 

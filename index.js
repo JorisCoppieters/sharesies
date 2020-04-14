@@ -41,7 +41,7 @@ const BUY_SCORE_THRESHOLD = 0.6;
 const MIN_FUND_ALLOCATION = 5;
 const DISTRIBUTION_MAGNITUDE = 2;
 const EXPLORATORY_RATIO = 0.5;
-const SELL_LOCK = true;
+const SELL_LOCK = false;
 const MAX_FUNDS_FOR_SCORES = 20;
 const MAX_FUNDS_FOR_BUY = 20;
 

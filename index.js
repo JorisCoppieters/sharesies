@@ -34,14 +34,15 @@ const g_ARGV = minimist(process.argv.slice(2));
 const DEBUG = g_ARGV['d'];
 const EXECUTE = g_ARGV['e'];
 const CLEAR_CACHE = g_ARGV['c'];
+const SELL_LOCK = g_ARGV['sl'];
 const HELP = g_ARGV['h'];
 const VERSION = g_ARGV['v'];
-const INVESTMENT_AMOUNT = 1000;
-const BUY_SCORE_THRESHOLD = 0.6;
+const INVESTMENT_AMOUNT = 5000;
+const BUY_SCORE_THRESHOLD = 2.8;
+const SELL_SCORE_THRESHOLD = 1.0;
 const MIN_FUND_ALLOCATION = 5;
 const DISTRIBUTION_MAGNITUDE = 2;
 const EXPLORATORY_RATIO = 0.5;
-const SELL_LOCK = true;
 const MAX_FUNDS_FOR_SCORES = 20;
 const MAX_FUNDS_FOR_BUY = 20;
 
@@ -109,7 +110,6 @@ sync.runGenerator(function* () {
             .sort((a, b) => a.info.score - b.info.score);
 
         let sortedFundsByBuy = sortedFunds.filter((fundInfo) => fundInfo.info.score >= BUY_SCORE_THRESHOLD).reverse();
-
         if (sortedFundsByBuy.length) {
             print.line();
             _printSectionHeader('Buy Scores');
@@ -119,12 +119,21 @@ sync.runGenerator(function* () {
                 .forEach((fundInfo) => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
         }
 
-        let sortedFundsBySell = sortedFunds.filter((fundInfo) => fundInfo.info.score < BUY_SCORE_THRESHOLD);
-
+        let sortedFundsBySell = sortedFunds.filter((fundInfo) => fundInfo.info.score <= SELL_SCORE_THRESHOLD);
         if (sortedFundsBySell.length) {
             _printSectionHeader('Sell Scores');
 
             sortedFundsBySell
+                .filter((_, idx) => idx < MAX_FUNDS_FOR_SCORES)
+                .forEach((fundInfo) => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
+        }
+
+        let sortedFundsByMid = sortedFunds
+            .filter((fundInfo) => fundInfo.info.score > SELL_SCORE_THRESHOLD && fundInfo.info.score < BUY_SCORE_THRESHOLD)
+            .reverse();
+        if (sortedFundsByMid.length) {
+            _printSectionHeader('Mid Scores');
+            sortedFundsByMid
                 .filter((_, idx) => idx < MAX_FUNDS_FOR_SCORES)
                 .forEach((fundInfo) => sharesies.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized, INVESTMENT_AMOUNT));
         }
@@ -237,6 +246,11 @@ sync.runGenerator(function* () {
             } else {
                 print.info(`Allocated more than enough $${fundsFound.toFixed(2)} for exploratory investment, no need to sell`);
             }
+        }
+
+        if (sortedFundsByMid.length) {
+            _printActionsHeader('Potential Actions for selling');
+            yield maybeSellShares(sharesiesInfo, sortedFunds);
         }
 
         let daysAgo = 7;
@@ -460,7 +474,7 @@ function sellShares(user, sharesiesInfo, sortedFunds, exploratorySellAllocation)
                 return;
             }
 
-            if (fundInfo.info.score < BUY_SCORE_THRESHOLD) {
+            if (fundInfo.info.score <= SELL_SCORE_THRESHOLD) {
                 if (sharesValue <= 200) {
                     return;
                 }
@@ -497,6 +511,33 @@ function sellShares(user, sharesiesInfo, sortedFunds, exploratorySellAllocation)
             }
         })
         .then(() => totalSoldValue);
+}
+
+// ******************************
+
+function maybeSellShares(sharesiesInfo, sortedFunds) {
+    let portfolioFundIds = sharesiesInfo.funds.map((fund) => fund.fund_id);
+    let sharesAmountByFundId = sharesiesInfo.funds.reduce((dict, fund) => {
+        dict[fund.fund_id] = fund.shares;
+        return dict;
+    }, {});
+
+    let sortedFundsInPortfolio = sortedFunds.filter((fundInfo) => portfolioFundIds.indexOf(fundInfo.fund.id) >= 0);
+    return sortedFundsInPortfolio
+        .sort((a, b) => b.info.score - a.info.score)
+        .forEachThen((fundInfo) => {
+            let sharesAmount = parseInt(sharesAmountByFundId[fundInfo.fund.id] || 0);
+            let sharePrice = fundInfo.info.currentPrice;
+            let sharesValue = sharesAmount * sharePrice;
+
+            if (fundInfo.info.score > SELL_SCORE_THRESHOLD && fundInfo.info.score < BUY_SCORE_THRESHOLD) {
+                print.info(
+                    `=> Maybe sell ${_numberRound(sharesAmount)} shares ($${sharesValue.toFixed(2)}) for ${fundInfo.fund.code} (${
+                        fundInfo.fund.name
+                    })`
+                );
+            }
+        });
 }
 
 // ******************************

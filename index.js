@@ -76,10 +76,10 @@ sync.runGenerator(function* () {
         cprint.cyan('Loading...');
 
         if (!credentials.get('username')) {
-            credentials.set('username', readline.sync('Please enter your username'));
+            credentials.set('username', readline.sync('Please enter your username').trim());
         }
         if (!credentials.get('password')) {
-            credentials.set('password', readline.hiddenSync('Please enter your password'));
+            credentials.set('password', readline.hiddenSync('Please enter your password').trim());
         }
 
         let loginData = yield sharesies.login(credentials.get('username'), credentials.get('password'));
@@ -93,6 +93,7 @@ sync.runGenerator(function* () {
         }
 
         let sharesiesInfo = yield sharesies.getInfo();
+
         let sharesiesStats = yield sharesies.getStats(user);
         let sharesiesTransactions = yield sharesies.getTransactions(user);
 

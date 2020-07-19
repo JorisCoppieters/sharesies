@@ -1,0 +1,30 @@
+{
+    "defaultSeverity": "error",
+    "extends": [
+        "tslint:recommended"
+    ],
+    "jsRules": {},
+    "rules": {
+        "indent": {
+            "options": [
+                "spaces",
+                4
+            ]
+        },
+        "linebreak-style": {
+            "options": "LF"
+        },
+        "no-any": {
+            "severity": "warning"
+        },
+        "no-var-requires": false,
+        "variable-name": {
+            "options": [
+                "allow-snake-case",
+                "require-const-for-all-caps",
+                "ban-keywords"
+            ]
+        }
+    },
+    "rulesDirectory": []
+}

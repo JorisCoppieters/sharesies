@@ -18,7 +18,6 @@ let g_CREDENTIALS: {[id: string]: string} = {};
 
 export function loadCredentials() {
     let credentialsContent = readFile(getCredentialsFile());
-
     try {
         g_CREDENTIALS = JSON.parse(decrypt(credentialsContent));
     } catch (e) {
@@ -34,7 +33,7 @@ export function loadCredentials() {
 // ******************************
 
 export function getCredentials(key: string) {
-    if (g_CREDENTIALS === {}) {
+    if (!Object.keys(g_CREDENTIALS).length) {
         loadCredentials();
     }
     return g_CREDENTIALS[key] || '';
@@ -43,7 +42,7 @@ export function getCredentials(key: string) {
 // ******************************
 
 export function setCredentials(key: string, val: string) {
-    if (g_CREDENTIALS === {}) {
+    if (!Object.keys(g_CREDENTIALS).length) {
         loadCredentials();
     }
     g_CREDENTIALS[key] = val;

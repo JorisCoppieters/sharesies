@@ -2,17 +2,18 @@
 // Imports:
 // ******************************
 
+import { CartItem } from './models/cart-item';
 import { clearAll, cached } from '../_common/ts/cache/cache';
 import { curDateStamp, getDateStampRange } from '../_common/ts/system/date';
+import { forEachThen } from '../_common/ts/system/array';
+import { Fund } from './models/fund';
 import { getOrderedValues } from '../_common/ts/system/dict';
 import { leftPad, rightPad } from '../_common/ts/system/string';
+import { User } from './models/user';
 import * as cache from '../_common/ts/cache/cache';
 import * as request from '../_common/ts/network/request';
 
 import Promise from 'bluebird';
-import { User } from './models/user';
-import { Fund } from './models/fund';
-import { CartItem } from './models/cart-item';
 
 const cprint = require('color-print');
 
@@ -226,33 +227,30 @@ export function getFunds() {
                     (data) => {
                         let curDate = curDateStamp();
                         let funds = data['funds'].filter((fund: Fund) => ['NZB', '450002', '450007'].indexOf(fund.code) < 0);
-                        // .filter(fund => ['EUF'].indexOf(fund.code) >= 0);
 
-                        funds
-                            .forEachThen((fund: Fund) =>
-                                request
-                                    .get('fund/price-history', {
-                                        fund_id: fund['id'],
-                                        first: firstDateStamp,
-                                    })
-                                    .then(
-                                        (data) => {
-                                            fund.day_prices = Object.assign(
-                                                {},
-                                                (() => {
-                                                    let dict: { [key: string]: any } = {};
-                                                    dict[curDate] = fund.market_price;
-                                                    return dict;
-                                                })(),
-                                                fund.day_prices,
-                                                data['day_prices']
-                                            );
-                                            return Promise.resolve();
-                                        },
-                                        (err) => reject(err)
-                                    )
-                            )
-                            .then(() => resolve(funds));
+                        forEachThen(funds, (fund: Fund) =>
+                            request
+                                .get('fund/price-history', {
+                                    fund_id: fund.id,
+                                    first: firstDateStamp,
+                                })
+                                .then(
+                                    (data) => {
+                                        fund.day_prices = Object.assign(
+                                            {},
+                                            (() => {
+                                                let dict: { [key: string]: any } = {};
+                                                dict[curDate] = fund.market_price;
+                                                return dict;
+                                            })(),
+                                            fund.day_prices,
+                                            data['day_prices']
+                                        );
+                                        return Promise.resolve();
+                                    },
+                                    (err) => reject(err)
+                                )
+                        ).then(() => resolve(funds));
                     },
                     (err) => reject(err)
                 )
@@ -266,29 +264,27 @@ export function getFunds() {
 
 export function getFundsCleaned() {
     return getFunds().then((funds) => {
-        let dateKeys = getDateStampRange(500).reverse();
+        let dateKeys = getDateStampRange(10).reverse();
 
-        return funds
-            .forEachThen((fund: Fund) => {
-                let consistentDayPrices: { [key: string]: any } = {};
-                let dayPrices = fund.day_prices;
-                let firstPrice = getOrderedValues(dayPrices, parseFloat)[0];
+        return forEachThen(funds, (fund: Fund) => {
+            let consistentDayPrices: { [key: string]: any } = {};
+            let dayPrices = fund.day_prices;
+            let firstPrice = getOrderedValues(dayPrices, parseFloat)[0];
 
-                let prevDateKey: string = '';
-                dateKeys.forEach((dateKey: string) => {
-                    if (!dayPrices[dateKey] && consistentDayPrices[prevDateKey]) {
-                        consistentDayPrices[dateKey] = consistentDayPrices[prevDateKey];
-                    } else if (dayPrices[dateKey]) {
-                        consistentDayPrices[dateKey] = dayPrices[dateKey];
-                    } else if (!consistentDayPrices.length) {
-                        consistentDayPrices[dateKey] = firstPrice;
-                    }
-                    prevDateKey = dateKey;
-                });
+            let prevDateKey: string = '';
+            dateKeys.forEach((dateKey: string) => {
+                if (!dayPrices[dateKey] && consistentDayPrices[prevDateKey]) {
+                    consistentDayPrices[dateKey] = consistentDayPrices[prevDateKey];
+                } else if (dayPrices[dateKey]) {
+                    consistentDayPrices[dateKey] = dayPrices[dateKey];
+                } else if (!consistentDayPrices.length) {
+                    consistentDayPrices[dateKey] = firstPrice;
+                }
+                prevDateKey = dateKey;
+            });
 
-                fund.day_prices = consistentDayPrices;
-            })
-            .then(() => Promise.resolve(funds));
+            fund.day_prices = consistentDayPrices;
+        }).then(() => Promise.resolve(funds));
     });
 }
 

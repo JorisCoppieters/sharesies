@@ -51,7 +51,7 @@ export function readHiddenLineSync(in_question: string, in_username?: string) {
 
 function _readLineSync(in_question: string) {
     print.out(in_question);
-    let input: Buffer = new Buffer('');
+    let input: Buffer | null = null;
     process.stdin.resume();
     process.stdin.setEncoding('utf8');
     process.stdin.on('data', (text) => {
@@ -61,7 +61,7 @@ function _readLineSync(in_question: string) {
         require('deasync').sleep(100);
     }
     process.stdin.pause();
-    return input.toString().trim();
+    return (input as Buffer).toString().trim();
 }
 
 // ******************************
@@ -99,11 +99,13 @@ function _readHiddenLineSyncWindows(in_question: string, in_username: string) {
 // ******************************
 
 function _readHiddenLineSyncInClear(in_question: string) {
-    return _readLineSync(
+    const input = _readLineSync(
         cprint.toWhite(in_question) +
             cprint.toRed(' (WARNING: due to shell incompatibility, the input cannot be hidden):') +
             cprint.toBlack(' ', true)
     );
+    print.out(cprint.toBlue(''));
+    return input;
 }
 
 // ******************************

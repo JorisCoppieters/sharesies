@@ -28,13 +28,29 @@ let g_CACHE_LOADED: number | null = null;
 // ******************************
 
 export function clear(in_key: string) {
-    return _clear(in_key);
+    let key = (in_key || '').trim();
+
+    return new Promise((resolve) => {
+        let cacheItems = _loadCache();
+
+        if (cacheItems[key]) {
+            delete cacheItems[key];
+            _saveCache();
+        }
+
+        return resolve(true);
+    });
 }
 
 // ******************************
 
 export function clearAll() {
-    return _clearAll();
+    return new Promise((resolve) => {
+        _loadCache();
+        g_CACHE_ITEMS = [];
+        _saveCache();
+        return resolve(true);
+    });
 }
 
 // ******************************
@@ -105,34 +121,6 @@ function _set(in_key: string, in_value: string, in_expire: number) {
             encrypted: true,
             expires: now + in_expire * 1000,
         };
-        _saveCache();
-        return resolve(true);
-    });
-}
-
-// ******************************
-
-function _clear(in_key: string) {
-    let key = (in_key || '').trim();
-
-    return new Promise((resolve) => {
-        let cacheItems = _loadCache();
-
-        if (cacheItems[key]) {
-            delete cacheItems[key];
-            _saveCache();
-        }
-
-        return resolve(true);
-    });
-}
-
-// ******************************
-
-function _clearAll() {
-    return new Promise((resolve) => {
-        _loadCache();
-        g_CACHE_ITEMS = [];
         _saveCache();
         return resolve(true);
     });

@@ -1,4 +1,10 @@
 // ******************************
+// Imports:
+// ******************************
+
+import dollarRound from '../calculators/dollar-round';
+
+// ******************************
 // Declarations:
 // ******************************
 
@@ -60,6 +66,17 @@ export function trimObject(in_data: any) {
     }
 
     return data;
+}
+
+// ******************************
+
+export function toPriceString(in_value: number): string {
+    const negative = in_value < 0;
+    const absVal = Math.abs(in_value);
+    const fullValue = dollarRound(absVal);
+    const decimalValue = dollarRound((absVal - fullValue) * 100);
+    const stringValue = `$${Number(fullValue).toLocaleString()}.${('00' + decimalValue).slice(-2)}`;
+    return negative ? `(${stringValue})` : `${stringValue}`;
 }
 
 // ******************************

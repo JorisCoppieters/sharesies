@@ -69,10 +69,8 @@ export function getNiceDate(in_date?: Date): string {
 
 export function getDateStampRange(in_numDays: number): string[] {
     let numDays = in_numDays || 365;
-    console.log(Array(numDays).keys());
-    // let dateKeys = [...Array(numDays).keys()].map((day) => new Date(Date.now() - 3600 * 24 * 1000 * day)).map((date) => toDateStamp(date));
-    // return dateKeys;
-    return [];
+    let dateKeys = [...Array(numDays).keys()].map((day) => new Date(Date.now() - 3600 * 24 * 1000 * day)).map((date) => toDateStamp(date));
+    return dateKeys;
 }
 
 // ******************************

@@ -35,7 +35,7 @@ const verboseMode = !!_getArgumentFlags().verbose;
 
 const portIdx = parseInt(process.env.APP_PORT_IDX || '', 10) || 0;
 
-let logLevel = _extractValidEnum('APP_LOG_LEVEL', LOG_LEVEL, LOG_LEVEL.Info);
+let logLevel = _extractValidEnum('APP_LOG_LEVEL', LOG_LEVEL, LOG_LEVEL.Warning);
 if (debugMode) {
     logLevel = Math.max(logLevel, LOG_LEVEL.Debug);
 } else if (verboseMode) {

@@ -38,6 +38,7 @@
     "url": "git+https://github.com/JorisCoppieters/sharesies.git"
   },
   "scripts": {
+    "auto": "ts-node-dev auto.ts --respawn --no-notify",
     "build": "tsc --build tsconfig.json",
     "test": "jest --silent"
   },

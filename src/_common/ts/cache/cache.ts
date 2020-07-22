@@ -7,13 +7,14 @@ import { getConfigFolder } from '../system/env';
 import * as blob from '../security/secureBlob';
 import * as file from '../system/file';
 
+import Promise from 'bluebird';
+
 const cprint = require('color-print');
 
 // ******************************
 // Constants:
 // ******************************
 
-const c_CLASS_NAME = 'cache';
 const c_MAX_CACHE_LOAD_AGE = 1000 * 60 * 60 * 1; // 1 Minute
 
 // ******************************
@@ -78,9 +79,15 @@ export const cached = (in_fn: Function, in_key: string, in_expire: number = 0, i
 // ******************************
 
 export const S = 1;
+export const SEC = 1;
 export const M = 60;
+export const MIN = 60;
 export const H = 60 * 60;
+export const HOUR = 60 * 60;
 export const D = 60 * 60 * 24;
+export const DAY = 60 * 60 * 24;
+export const WEEK = 60 * 60 * 24 * 7;
+export const YEAR = 60 * 60 * 24 * 365;
 
 // ******************************
 // Helper Functions:
@@ -105,12 +112,6 @@ function _get(in_key: string) {
 // ******************************
 
 function _set(in_key: string, in_value: string, in_expire: number) {
-    let fn = `${c_CLASS_NAME}._set`;
-
-    if (!in_expire) {
-        throw new Error(`${fn}: expiry not set!`);
-    }
-
     let now = new Date().getTime();
     let key = (in_key || '').trim();
 
@@ -119,7 +120,7 @@ function _set(in_key: string, in_value: string, in_expire: number) {
         cacheItems[key] = {
             value: blob.encrypt(in_value),
             encrypted: true,
-            expires: now + in_expire * 1000,
+            expires: in_expire > 0 ? now + in_expire * 1000 : -1,
         };
         _saveCache();
         return resolve(true);
@@ -171,7 +172,7 @@ function _loadCacheFromFile(in_cacheFile: string): { [id: string]: any } {
 
     (cache.items || [])
         .filter((item: any) => {
-            return item.expires > now;
+            return item.expires === -1 || item.expires > now;
         })
         .forEach((item: any) => {
             // if (item.encrypted) {
@@ -204,7 +205,7 @@ function _saveCacheToFile(in_cacheFile: string, in_cacheItems: { [id: string]: a
             );
         })
         .filter((item) => {
-            return item.expires > now;
+            return item.expires === -1 || item.expires > now;
         });
 
     file.writeJSON(cacheFile, cache, true);

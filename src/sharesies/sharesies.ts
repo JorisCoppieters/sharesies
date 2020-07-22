@@ -14,6 +14,8 @@ import * as cache from '../_common/ts/cache/cache';
 import * as request from '../_common/ts/network/request';
 
 import Promise from 'bluebird';
+import { FundHistory } from './models/fund-history';
+import { FundInfo } from './models/fund-info';
 
 const cprint = require('color-print');
 
@@ -39,17 +41,14 @@ export function getInfo() {
         () =>
             new Promise((resolve, reject) =>
                 request.get('identity/check', {}).then(
-                    (data) => {
-                        if (_handleErrors(fn, data, reject)) {
-                            return;
-                        }
-                        return resolve({
+                    (data) =>
+                        _handleErrors(fn, data, reject) ||
+                        resolve({
                             user: data.user,
                             funds: data.portfolio,
                             orders: data.orders,
                             value: data.portfolio_value,
-                        });
-                    },
+                        }),
                     (err) => reject(err)
                 )
             ),
@@ -71,12 +70,7 @@ export function getStats(user: User) {
                         acting_as_id: user.id,
                     })
                     .then(
-                        (data) => {
-                            if (_handleErrors(fn, data, reject)) {
-                                return;
-                            }
-                            resolve(data.stats);
-                        },
+                        (data) => _handleErrors(fn, data, reject) || resolve(data.stats),
                         (err) => reject(err)
                     )
             ),
@@ -100,12 +94,7 @@ export function getTransactions(user: User) {
                         limit: limit,
                     })
                     .then(
-                        (data) => {
-                            if (_handleErrors(fn, data, reject)) {
-                                return;
-                            }
-                            resolve(data.transactions);
-                        },
+                        (data) => _handleErrors(fn, data, reject) || resolve(data.transactions),
                         (err) => reject(err)
                     )
             ),
@@ -133,7 +122,7 @@ export function clearCart(user: User) {
                     })
                 );
             });
-            Promise.all(resolveAll).then(resolve);
+            return Promise.all(resolveAll).then(() => resolve());
         })
     );
 }
@@ -217,53 +206,8 @@ export function confirmCart(user: User, password: string) {
 
 // ******************************
 
-export function getFunds() {
-    let firstDateStamp = `${new Date().getFullYear() - 2}-01-01`;
-
-    return cache.cached(
-        () =>
-            new Promise((resolve, reject) =>
-                request.get('fund/list', {}).then(
-                    (data) => {
-                        let curDate = curDateStamp();
-                        let funds = data['funds'].filter((fund: Fund) => ['NZB', '450002', '450007'].indexOf(fund.code) < 0);
-
-                        forEachThen(funds, (fund: Fund) =>
-                            request
-                                .get('fund/price-history', {
-                                    fund_id: fund.id,
-                                    first: firstDateStamp,
-                                })
-                                .then(
-                                    (data) => {
-                                        fund.day_prices = Object.assign(
-                                            {},
-                                            (() => {
-                                                let dict: { [key: string]: any } = {};
-                                                dict[curDate] = fund.market_price;
-                                                return dict;
-                                            })(),
-                                            fund.day_prices,
-                                            data['day_prices']
-                                        );
-                                        return Promise.resolve();
-                                    },
-                                    (err) => reject(err)
-                                )
-                        ).then(() => resolve(funds));
-                    },
-                    (err) => reject(err)
-                )
-            ),
-        `SHARESIES_FUNDS_${firstDateStamp}`,
-        cache.H * 2
-    );
-}
-
-// ******************************
-
 export function getFundsCleaned() {
-    return getFunds().then((funds) => {
+    return getFundsWithDailyPrices().then((funds: Fund[]) => {
         let dateKeys = getDateStampRange(10).reverse();
 
         return forEachThen(funds, (fund: Fund) => {
@@ -290,18 +234,129 @@ export function getFundsCleaned() {
 
 // ******************************
 
-export function getMarketPricesAverage(in_funds: Fund[]) {
+export function getFundsWithDailyPrices(): Promise<Fund[]> {
+    return getFunds().then((funds: Fund[]) => forEachThen(funds, (fund: Fund) => getHistoryForFund(fund)).then((_) => funds));
+}
+
+// ******************************
+
+export function getFunds(): Promise<Fund[]> {
+    return cache.cached(
+        () =>
+            new Promise((resolve, reject) =>
+                request.get('fund/list', {}).then(
+                    (data) => resolve(data['funds'].filter((fund: Fund) => ['NZB', '450002', '450007'].indexOf(fund.code) < 0)),
+                    (err) => reject(err)
+                )
+            ),
+        `SHARESIES_FUNDS`,
+        cache.HOUR * 2
+    );
+}
+
+// ******************************
+
+export function getHistoryForFund(in_fund: Fund): Promise<Fund> {
+    const promises = [];
+
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+    const curDate = curDateStamp();
+
+    const yearsAgo = 2;
+    [...Array(yearsAgo)]
+        .map((_, idx) => curYear - (idx + 1))
+        .reverse()
+        .forEach((year) => {
+            [...Array(12)]
+                .map((_, idx) => idx + 1)
+                .forEach((month) => {
+                    promises.push(getHistoryForFundOnMonth(in_fund, year, month));
+                });
+        });
+
+    if (curMonth > 1) {
+        [...Array(curMonth - 1)]
+            .map((_, idx) => idx + 1)
+            .forEach((month) => {
+                promises.push(getHistoryForFundOnMonth(in_fund, curYear, month));
+            });
+    }
+    promises.push(getHistoryForFundOnCurrentMonth(in_fund, curYear, curMonth));
+
+    return Promise.all(promises).then((results) => {
+        const allDayPrices = results.reduce((allDayPrices: { [key: string]: string }, fund: FundHistory) => {
+            return Object.assign(allDayPrices, fund.day_prices);
+        }, {});
+
+        allDayPrices[curDate] = `${in_fund.market_price}`;
+        in_fund.day_prices = allDayPrices;
+
+        return in_fund;
+    });
+}
+
+// ******************************
+
+export function getHistoryForFundOnMonth(in_fund: Fund, in_year: number, in_month: number): Promise<FundHistory> {
+    let firstDateStamp = `${in_year}-${leftPad(`${in_month}`, '0', 2)}-01`;
+
+    let nextYear = in_year;
+    let nextMonth = in_month + 1;
+    if (nextMonth === 13) {
+        nextMonth = 1;
+        nextYear = in_year + 1;
+    }
+    let lastDateStamp = `${nextYear}-${leftPad(`${nextMonth}`, '0', 2)}-01`;
+
+    return cache.cached(
+        () =>
+            request.get('fund/price-history', {
+                fund_id: in_fund.id,
+                first: firstDateStamp,
+                last: lastDateStamp,
+            }),
+        `SHARESIES_FUND_HISTORY_${in_fund.id}_${firstDateStamp}_${lastDateStamp}`,
+        -1
+    );
+}
+
+// ******************************
+
+export function getHistoryForFundOnCurrentMonth(in_fund: Fund, in_year: number, in_month: number): Promise<FundHistory> {
+    let firstDateStamp = `${in_year}-${leftPad(`${in_month}`, '0', 2)}-01`;
+
+    let nextMonth = in_month + 1;
+    if (nextMonth === 13) {
+        nextMonth = 1;
+    }
+
+    return cache.cached(
+        () =>
+            request.get('fund/price-history', {
+                fund_id: in_fund.id,
+                first: firstDateStamp,
+            }),
+        `SHARESIES_FUND_HISTORY_${in_fund.id}_${firstDateStamp}`,
+        cache.H * 2
+    );
+}
+
+// ******************************
+
+export function getMarketPricesAverage(in_funds: Fund[]): number[] {
     return in_funds
         .reduce((marketPricesSum: number[], fund: Fund) => {
             let fundPrices = getOrderedValues(fund.day_prices, parseFloat);
-            return marketPricesSum ? marketPricesSum.map((val, idx) => val + fundPrices[idx]) : fundPrices;
+            return marketPricesSum.length ? marketPricesSum.map((val, idx) => val + fundPrices[idx]) : fundPrices;
         }, [])
         .map((val) => val / in_funds.length);
 }
 
 // ******************************
 
-export function getNormalizedValues(in_values: number[]) {
+export function getNormalizedValues(in_values: number[]): number[] {
     let minValue = Math.min.apply(null, in_values);
     let maxValue = Math.max.apply(null, in_values);
     let valueRange = maxValue - minValue;
@@ -314,10 +369,10 @@ export function getNormalizedValues(in_values: number[]) {
 
 // ******************************
 
-export function getFundInvestmentInfo(fund: Fund, marketPricesNormalized: number[]) {
+export function getFundInvestmentInfo(fund: Fund, marketPricesNormalized: number[]): FundInfo {
     let code = fund.code;
 
-    let fundPrices = getOrderedValues(fund.day_prices, parseFloat);
+    let fundPrices = getOrderedValues(fund.day_prices, parseFloat) as number[];
     let fundPricesNormalized = getNormalizedValues(fundPrices);
 
     let minPrice = Math.min.apply(null, fundPrices);
@@ -378,7 +433,7 @@ export function getFundInvestmentInfo(fund: Fund, marketPricesNormalized: number
         priceGainPotential,
         growth,
         score,
-    };
+    } as FundInfo;
 }
 
 // ******************************
@@ -487,6 +542,8 @@ export function login(username: string, password: string) {
     );
 }
 
+// ******************************
+// Helper Functions:
 // ******************************
 
 export function _amountOfMarketBuyFee(amount: string, fundType: string) {

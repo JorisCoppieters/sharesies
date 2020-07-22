@@ -1,22 +1,25 @@
 // ******************************
-// Imports:
-// ******************************
-
-import { Fund } from './fund';
-
-// ******************************
 // Declarations:
 // ******************************
 
 export interface FundInfo {
-    id: number;
     code: string;
-    info: {
-        score: number;
-        currentPrice: number;
-        fundPrices: { [key: string]: number };
-    };
-    fund: Fund;
+    fundPrices: number[];
+    fundPricesNormalized: number[];
+    minPrice: number;
+    maxPrice: number;
+    priceRange: number;
+    priceSum: number;
+    priceCount: number;
+    avgPrice: number;
+    currentPrice: number;
+    currentNormalizedPrice: number;
+    currentNormalizedMarketPrice: number;
+    currentPotentialPrice: number;
+    marketVariability: number;
+    priceGainPotential: number;
+    growth: number;
+    score: number;
 }
 
 // ******************************

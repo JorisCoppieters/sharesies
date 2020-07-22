@@ -31,17 +31,13 @@ let g_COOKIE_VALUES: { [key: string]: any } = {};
 // ******************************
 
 export function post(in_url: string, in_requestData: { [key: string]: any }) {
-    return new Promise((resolve, reject) => {
-        _request(in_url, 'POST', in_requestData, resolve, reject);
-    }).then(_debugResult);
+    return new Promise((resolve, reject) => _request(in_url, 'POST', in_requestData, resolve, reject)).then(_debugResult);
 }
 
 // ******************************
 
 export function get(in_url: string, in_requestData: { [key: string]: any }) {
-    return new Promise((resolve, reject) => {
-        _request(in_url, 'GET', in_requestData, resolve, reject);
-    }).then(_debugResult);
+    return new Promise((resolve, reject) => _request(in_url, 'GET', in_requestData, resolve, reject)).then(_debugResult);
 }
 
 // ******************************
@@ -64,13 +60,7 @@ export function setCookieValues(in_cookieValues: string[]) {
 // Helper Functions:
 // ******************************
 
-function _request(
-    in_url: string,
-    in_method: string,
-    in_requestData: { [key: string]: any },
-    in_onSuccess: Function,
-    in_onError: Function
-) {
+function _request(in_url: string, in_method: string, in_requestData: { [key: string]: any }, in_onSuccess: Function, in_onError: Function) {
     let fn = `${c_CLASS_NAME}._request`;
 
     let url = in_url;

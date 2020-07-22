@@ -3,7 +3,7 @@
 // ******************************
 
 export interface FundShare {
-    fund_id: number;
+    fund_id: string;
     shares: number;
     value: number;
     return_percent: number;

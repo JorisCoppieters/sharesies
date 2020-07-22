@@ -2,12 +2,12 @@
 // Declarations:
 // ******************************
 
-export interface Fund {
-    id: string;
-    code: string;
-    name: string;
+export interface FundHistory {
     day_prices: { [key: string]: string };
-    market_price: number;
+    first: string;
+    fund_id: string;
+    last: string;
+    type: string;
 }
 
 // ******************************

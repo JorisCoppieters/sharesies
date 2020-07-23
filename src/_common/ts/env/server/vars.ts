@@ -35,14 +35,6 @@ const verboseMode = !!_getArgumentFlags().verbose;
 
 const portIdx = parseInt(process.env.APP_PORT_IDX || '', 10) || 0;
 
-let logLevel = _extractValidEnum('APP_LOG_LEVEL', LOG_LEVEL, LOG_LEVEL.Warning);
-if (debugMode) {
-    logLevel = Math.max(logLevel, LOG_LEVEL.Debug);
-} else if (verboseMode) {
-    logLevel = Math.max(logLevel, LOG_LEVEL.Verbose);
-}
-logger.configureLogLevel(logLevel);
-
 export const ADMIN_PASSWORD = process.env[`${APP_NAME_UPPERCASE_VARIABLE}_ADMIN_PASSWORD`] || null;
 
 export const ENV: ENV_TYPE = envType;
@@ -51,6 +43,17 @@ export const IS_TEST = envType === ENV_TYPE.Test;
 export const IS_PROD = envType === ENV_TYPE.Production;
 export const SHORT_ENV: string = IS_PROD ? 'prod' : IS_TEST ? 'test' : 'dev';
 export const ENV_PREFIX: string = IS_PROD ? '' : `${SHORT_ENV}.`;
+
+let logLevel = _extractValidEnum('APP_LOG_LEVEL', LOG_LEVEL, LOG_LEVEL.Info);
+if (debugMode) {
+    logLevel = Math.max(logLevel, LOG_LEVEL.Debug);
+} else if (verboseMode) {
+    logLevel = Math.max(logLevel, LOG_LEVEL.Verbose);
+} else if (IS_PROD) {
+    logLevel = LOG_LEVEL.Warning;
+}
+
+logger.configureLogLevel(logLevel);
 
 const prodPortGroup = 4000;
 const prodWebPortGroup = 5000;

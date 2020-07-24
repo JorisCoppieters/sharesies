@@ -10,7 +10,6 @@ import {
     getNormalizedValues,
     getStats,
     login,
-    sellFund,
     printFundInvestmentInfo,
     clearCart,
     addCartItem,
@@ -252,7 +251,7 @@ function autoBuyShares(
 
 // ******************************
 
-function autoSellShares(user: User, sharesiesInfo: Info, sortedFunds: FundExtended[]) {
+function autoSellShares(_user: User, sharesiesInfo: Info, sortedFunds: FundExtended[]) {
     let portfolioFundIds = sharesiesInfo.funds.map((fund) => fund.fund_id);
     let sharesAmountByFundId = sharesiesInfo.funds.reduce((dict: { [key: string]: any }, fund: FundShare) => {
         dict[fund.fund_id] = fund.shares;
@@ -268,7 +267,23 @@ function autoSellShares(user: User, sharesiesInfo: Info, sortedFunds: FundExtend
     let sortedFundsInPortfolio = sortedFunds.filter((fundInfo) => portfolioFundIds.indexOf(fundInfo.fund.id) >= 0);
     return sortedFundsInPortfolio
         .sort((a, b) => a.info.score - b.info.score)
-        .filter((fundExtended: FundExtended) => ['EUF', 'NPF', 'OZY', 'EMF', 'MDZ', 'USF', 'FNZ'].indexOf(fundExtended.code) < 0)
+        .filter(
+            (fundExtended: FundExtended) =>
+                [
+                    // Index Funds
+                    'EUF',
+                    'NPF',
+                    'OZY',
+                    'EMF',
+                    'MDZ',
+                    'USF',
+                    'FNZ',
+                    '450005',
+                    // High Dividend Funds
+                    'JLG',
+                    'HGH',
+                ].indexOf(fundExtended.code) < 0
+        )
         .reduce((resolve: Promise<boolean>, fundExtended: FundExtended) => {
             return resolve.then(() => {
                 if (fundExtended.info.score > SELL_SCORE_THRESHOLD) {
@@ -295,16 +310,17 @@ function autoSellShares(user: User, sharesiesInfo: Info, sortedFunds: FundExtend
                 sharesValue = sharesAmount * sharePrice;
 
                 print.action(
-                    `=> Auto selling ${_numberRound(sharesAmount)} shares ($${sharesValue.toFixed(2)}) for ${fundExtended.fund.code} (${
+                    `=> Consider selling ${_numberRound(sharesAmount)} shares ($${sharesValue.toFixed(2)}) for ${fundExtended.fund.code} (${
                         fundExtended.fund.name
                     })`
                 );
                 totalSoldValue += sharesValue;
+                return true;
 
-                return sellFund(user, fundExtended.fund, _numberRound(sharesAmount)).then((data) => {
-                    print.errors(data);
-                    return true;
-                });
+                // return sellFund(user, fundExtended.fund, _numberRound(sharesAmount)).then((data) => {
+                //     print.errors(data);
+                //     return true;
+                // });
             });
         }, Promise.resolve(true))
         .then(() => totalSoldValue);

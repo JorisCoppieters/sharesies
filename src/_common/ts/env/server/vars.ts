@@ -28,7 +28,7 @@ export const LOCAL_STORAGE_PREFIX = APP_NAME_VARIABLE;
 const appHost = (process.env.APP_HOST as string) || `${APP_NAME_VARIABLE}.jobot-software.com`;
 export const HOST = appHost;
 
-const envType = _extractValidEnum('APP_ENV_TYPE', ENV_TYPE, ENV_TYPE.Production);
+const envType = _extractValidEnum('APP_ENV_TYPE', ENV_TYPE, ENV_TYPE.Development);
 
 const debugMode = !!_getArgumentFlags().debug;
 const verboseMode = !!_getArgumentFlags().verbose;

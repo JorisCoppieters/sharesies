@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import { Cache } from './models/cache';
 import { getConfigFolder } from '../system/env';
 import * as blob from '../security/secureBlob';

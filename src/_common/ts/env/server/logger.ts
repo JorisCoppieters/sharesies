@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import { LOG_LEVEL } from '../enums';
 import { LoggerConfig } from './models/logger-config';
 

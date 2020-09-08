@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import { encrypt, decrypt } from './secureBlob';
 import { write as writeFile, read as readFile } from '../system/file';
 import { getConfigFolder } from '../system/env';

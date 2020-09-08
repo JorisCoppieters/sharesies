@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import { isTTY, isWindows, isMacOSX, getTemp } from './env';
 import * as print from '../env/server/print';
 

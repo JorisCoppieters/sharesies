@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import { IS_DEV, IS_TEST } from './vars';
 import { isObject } from 'util';
 import * as logger from './logger';

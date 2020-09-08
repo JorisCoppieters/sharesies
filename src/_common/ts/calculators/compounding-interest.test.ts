@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import compoundingInterest from './compounding-interest';
 
 // ******************************

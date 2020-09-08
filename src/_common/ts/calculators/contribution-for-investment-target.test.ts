@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import contributionForInvestmentTarget from './contribution-for-investment-target';
 
 // ******************************

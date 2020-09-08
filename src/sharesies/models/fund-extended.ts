@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import { Fund } from './fund';
 import { FundInfo } from './fund-info';
 

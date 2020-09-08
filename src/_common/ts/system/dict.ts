@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import { EntriesOptions } from './models/entries-options';
 import { Promise } from 'bluebird';
 

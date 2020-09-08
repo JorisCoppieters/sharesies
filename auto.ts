@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import {
     getFundInvestmentInfo,
     getFundsCleaned,

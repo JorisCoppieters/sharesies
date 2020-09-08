@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import { ApiConfig } from './api-config';
 import { AppConfig } from './app-config';
 

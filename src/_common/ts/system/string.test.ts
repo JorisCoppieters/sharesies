@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import { toPriceString, fromPriceString, toPercentageString, fromPercentageString } from './string';
 
 // ******************************

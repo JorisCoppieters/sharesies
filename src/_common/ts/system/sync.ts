@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 export function runGenerator(generatorFunction: Function) {
     let next = function (err?: any, arg?: any) {
         if (err && typeof err === 'string') return it.throw(new Error(err));

@@ -1,7 +1,3 @@
-// ******************************
-// Imports:
-// ******************************
-
 import { CONFIG } from '../../../_common/ts/env/server/vars';
 import { trimObject } from '../system/string';
 

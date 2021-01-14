@@ -48,7 +48,7 @@ export function getInfo() {
                     (err) => reject(err)
                 )
             ),
-        'SHARESIES_INFO',
+        'SHARESIES_INFO_2',
         cache.H * 1
     );
 }
@@ -204,7 +204,7 @@ export function confirmCart(user: User, password: string) {
 
 export function getFundsCleaned() {
     return getFundsWithDailyPrices().then((funds: Fund[]) => {
-        let dateKeys = getDateStampRange(10).reverse();
+        let dateKeys = getDateStampRange(730).reverse();
 
         return forEachThen(funds, (fund: Fund) => {
             let consistentDayPrices: { [key: string]: any } = {};
@@ -404,8 +404,8 @@ export function getFundInvestmentInfo(fund: Fund, marketPricesNormalized: number
     let priceGainPotential = currentNormalizedMarketPrice - currentNormalizedPrice;
 
     let score = 1;
-    score += priceGainPotential * 3.5; // Weight towards how much below the market line current price is
-    score -= marketVariability * 4; // Weight away how different line is to market line
+    score += priceGainPotential * 4.5; // Weight towards how much below the market line current price is
+    score -= marketVariability * 6; // Weight away how different line is to market line
     score += growth * 2; // Weight towards positive growth over the last 20 price points
     // score += (priceDiff / 100); // Weight towards big price differences
 

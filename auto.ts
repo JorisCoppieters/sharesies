@@ -116,6 +116,9 @@ async function main() {
     if (exploratoryInvestmentBalance > 0) {
         _printActionsHeader('Actions for buying');
     }
+
+    return;
+
     let fundsAllocated = await autoBuyShares(user, sharesiesInfo, exploratoryInvestmentBalance, walletBalance, sortedFundsToBuy);
     if (fundsAllocated.boughtNew) {
         console.log('CONFIRM CART!');

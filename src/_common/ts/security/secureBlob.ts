@@ -47,9 +47,7 @@ function _decrypt(in_encrypted: string) {
 
     const encryptedText = Buffer.from(textParts[1], 'hex');
 
-    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-
+    let decrypted = Buffer.concat([decipher.update(encryptedText), decipher.final()]);
     return decrypted.toString();
 }
 

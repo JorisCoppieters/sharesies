@@ -30,9 +30,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const sharesies_1 = require("./src/sharesies/sharesies");
+const print = __importStar(require("./src/_common/ts/env/server/print"));
 const credentials_1 = require("./src/_common/ts/security/credentials");
 const readline_1 = require("./src/_common/ts/system/readline");
-const print = __importStar(require("./src/_common/ts/env/server/print"));
 const cprint = require('color-print');
 const BUY_SCORE_THRESHOLD = 3.0;
 const SELL_SCORE_THRESHOLD = 2.5;
@@ -72,18 +72,20 @@ function main() {
         let sortedFundsToBuy = sortedFunds.filter((fundExtended) => fundExtended.info.score >= BUY_SCORE_THRESHOLD).reverse();
         if (sortedFundsToBuy.length) {
             _printSectionHeader('Buy Scores');
-            sortedFundsToBuy
-                .filter((_, idx) => idx < MAX_FUNDS_FOR_SCORES)
-                .forEach((fundInfo) => sharesies_1.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized));
+            sortedFundsToBuy.filter((_, idx) => idx < MAX_FUNDS_FOR_SCORES).forEach((fundInfo) => sharesies_1.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized));
         }
         let sortedFundsToSell = sortedFunds.filter((fundExtended) => fundExtended.info.score < BUY_SCORE_THRESHOLD).reverse();
         if (sortedFundsToSell.length) {
             _printSectionHeader('Sell Scores');
-            sortedFundsToSell
-                .filter((_, idx) => idx < MAX_FUNDS_FOR_SCORES)
-                .forEach((fundInfo) => sharesies_1.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized));
+            sortedFundsToSell.filter((_, idx) => idx < MAX_FUNDS_FOR_SCORES).forEach((fundInfo) => sharesies_1.printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized));
         }
-        let walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
+        let walletBalance = 0;
+        if (sharesiesInfo.user['wallet_balances']) {
+            walletBalance = parseFloat(sharesiesInfo.user['wallet_balances'].nzd);
+        }
+        else if (sharesiesInfo.user['wallet_balance']) {
+            walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
+        }
         let portfolioBalance = parseFloat(sharesiesStats.total_portfolio);
         let purchaseSharesValue = sharesiesInfo.orders
             .filter((order) => order.type === 'buy')
@@ -107,8 +109,7 @@ function main() {
         if (exploratoryInvestmentBalance > 0) {
             _printActionsHeader('Actions for buying');
         }
-        return;
-        let fundsAllocated = yield autoBuyShares(user, sharesiesInfo, exploratoryInvestmentBalance, walletBalance, sortedFundsToBuy);
+        let fundsAllocated = yield autoBuyShares(sharesiesInfo, exploratoryInvestmentBalance, walletBalance, sortedFundsToBuy);
         if (fundsAllocated.boughtNew) {
             console.log('CONFIRM CART!');
         }
@@ -116,7 +117,7 @@ function main() {
     });
 }
 main();
-function autoBuyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBalance, sortedFunds) {
+function autoBuyShares(sharesiesInfo, exploratoryBuyAllocation, walletBalance, sortedFunds) {
     let availableFundAllocation = walletBalance;
     let totalScore = sortedFunds.reduce((scoreSum, fundExtended) => scoreSum + fundExtended.info.score, 0);
     let adjustedFundsDistribution = sortedFunds
@@ -133,7 +134,7 @@ function autoBuyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBala
         totalValue: 0,
         boughtNew: false,
     };
-    return sharesies_1.clearCart(user)
+    return Promise.resolve()
         .then(() => {
         if (!sortedFunds.length) {
             return Promise.resolve(true);
@@ -161,12 +162,12 @@ function autoBuyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBala
                     print.info(`Already have ${_numberRound(currentSharesAmount)} shares ($${currentSharesValue.toFixed(2)}) for ${fundExtended.fund.code} (${fundExtended.fund.name}) but investing more...`);
                 }
                 fundsAllocated.totalValue += currentSharesValue;
-                if (availableFundAllocation <= 0.01) {
+                if (isNaN(availableFundAllocation) || availableFundAllocation <= 0.01) {
                     print.warning(`Cannot invest into ${fundExtended.fund.code} (${fundExtended.fund.name}) since wallet balance is 0`);
                     return true;
                 }
                 let fundAllocation = Math.min(availableFundAllocation, (desiredSharesAmount - currentSharesAmount) * sharePrice);
-                if (fundAllocation < MIN_FUND_ALLOCATION) {
+                if (isNaN(fundAllocation) || fundAllocation < MIN_FUND_ALLOCATION) {
                     print.warning(`Cannot invest $${fundAllocation.toFixed(2)} into ${fundExtended.fund.code} (${fundExtended.fund.name}) since it will be below the minimum fund allocation $${MIN_FUND_ALLOCATION}`);
                     return true;
                 }
@@ -176,10 +177,7 @@ function autoBuyShares(user, sharesiesInfo, exploratoryBuyAllocation, walletBala
                 print.action(`=> Auto investing ${_numberRound(sharesAmountToBuy)} shares ($${fundAllocation.toFixed(2)}) into ${fundExtended.fund.code} (${fundExtended.fund.name})`);
                 availableFundAllocation -= fundAllocation;
                 fundsAllocated.boughtNew = true;
-                return sharesies_1.addCartItem(user, fundExtended.fund, fundAllocation).then((data) => {
-                    print.errors(data);
-                    return true;
-                });
+                return true;
             });
         }, Promise.resolve(true));
     })
@@ -218,9 +216,7 @@ function autoSellShares(_user, sharesiesInfo, sortedFunds) {
             if (fundExtended.info.score > SELL_SCORE_THRESHOLD) {
                 return true;
             }
-            let sellingShares = sharesiesInfo.orders
-                .filter((order) => order.fund_id === fundExtended.id)
-                .reduce((sum, order) => sum + order.shares, 0);
+            let sellingShares = sharesiesInfo.orders.filter((order) => order.fund_id === fundExtended.id).reduce((sum, order) => sum + order.shares, 0);
             if (sellingShares > 0) {
                 return true;
             }

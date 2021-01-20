@@ -1,26 +1,15 @@
 #!/usr/bin/env node
 
-import {
-    getFundInvestmentInfo,
-    getFundsCleaned,
-    getInfo,
-    getMarketPricesAverage,
-    getNormalizedValues,
-    getStats,
-    login,
-    printFundInvestmentInfo,
-    clearCart,
-    addCartItem,
-} from './src/sharesies/sharesies';
 import { Fund } from './src/sharesies/models/fund';
+import { FundExtended } from './src/sharesies/models/fund-extended';
 import { FundShare } from './src/sharesies/models/fund-share';
-import { getCredentials, setCredentials, saveCredentials } from './src/_common/ts/security/credentials';
 import { Info } from './src/sharesies/models/info';
 import { Order } from './src/sharesies/models/order';
-import { readLineSync, readHiddenLineSync } from './src/_common/ts/system/readline';
 import { User } from './src/sharesies/models/user';
+import { getFundInvestmentInfo, getFundsCleaned, getInfo, getMarketPricesAverage, getNormalizedValues, getStats, login, printFundInvestmentInfo } from './src/sharesies/sharesies';
 import * as print from './src/_common/ts/env/server/print';
-import { FundExtended } from './src/sharesies/models/fund-extended';
+import { getCredentials, saveCredentials, setCredentials } from './src/_common/ts/security/credentials';
+import { readHiddenLineSync, readLineSync } from './src/_common/ts/system/readline';
 
 const cprint = require('color-print');
 
@@ -76,20 +65,23 @@ async function main() {
     let sortedFundsToBuy = sortedFunds.filter((fundExtended: FundExtended) => fundExtended.info.score >= BUY_SCORE_THRESHOLD).reverse();
     if (sortedFundsToBuy.length) {
         _printSectionHeader('Buy Scores');
-        sortedFundsToBuy
-            .filter((_, idx) => idx < MAX_FUNDS_FOR_SCORES)
-            .forEach((fundInfo) => printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized));
+        sortedFundsToBuy.filter((_, idx) => idx < MAX_FUNDS_FOR_SCORES).forEach((fundInfo) => printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized));
     }
 
     let sortedFundsToSell = sortedFunds.filter((fundExtended: FundExtended) => fundExtended.info.score < BUY_SCORE_THRESHOLD).reverse();
     if (sortedFundsToSell.length) {
         _printSectionHeader('Sell Scores');
-        sortedFundsToSell
-            .filter((_, idx) => idx < MAX_FUNDS_FOR_SCORES)
-            .forEach((fundInfo) => printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized));
+        sortedFundsToSell.filter((_, idx) => idx < MAX_FUNDS_FOR_SCORES).forEach((fundInfo) => printFundInvestmentInfo(fundInfo.fund, marketPricesNormalized));
     }
 
-    let walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
+    let walletBalance = 0;
+
+    if (sharesiesInfo.user['wallet_balances']) {
+        walletBalance = parseFloat(sharesiesInfo.user['wallet_balances'].nzd);
+    } else if (sharesiesInfo.user['wallet_balance']) {
+        walletBalance = parseFloat(sharesiesInfo.user['wallet_balance']);
+    }
+
     let portfolioBalance = parseFloat(sharesiesStats.total_portfolio);
 
     let purchaseSharesValue = sharesiesInfo.orders
@@ -99,6 +91,7 @@ async function main() {
 
     let investmentBalance = walletBalance + portfolioBalance + purchaseSharesValue;
     let exploratoryInvestmentBalance = investmentBalance * EXPLORATORY_RATIO;
+
     let exploratoryInvestmentScore = sortedFundsToBuy.length
         ? sortedFundsToBuy
               .map((fundExtended: FundExtended) => {
@@ -119,9 +112,7 @@ async function main() {
         _printActionsHeader('Actions for buying');
     }
 
-    return;
-
-    let fundsAllocated = await autoBuyShares(user, sharesiesInfo, exploratoryInvestmentBalance, walletBalance, sortedFundsToBuy);
+    let fundsAllocated = await autoBuyShares(sharesiesInfo, exploratoryInvestmentBalance, walletBalance, sortedFundsToBuy);
     if (fundsAllocated.boughtNew) {
         console.log('CONFIRM CART!');
         // await confirmCart(user, getCredentials('password')).then((data) => {
@@ -136,13 +127,7 @@ main();
 
 // ******************************
 
-function autoBuyShares(
-    user: User,
-    sharesiesInfo: Info,
-    exploratoryBuyAllocation: number,
-    walletBalance: number,
-    sortedFunds: FundExtended[]
-) {
+function autoBuyShares(sharesiesInfo: Info, exploratoryBuyAllocation: number, walletBalance: number, sortedFunds: FundExtended[]) {
     let availableFundAllocation = walletBalance;
 
     let totalScore = sortedFunds.reduce((scoreSum, fundExtended) => scoreSum + fundExtended.info.score, 0);
@@ -164,7 +149,7 @@ function autoBuyShares(
         boughtNew: false,
     };
 
-    return clearCart(user)
+    return Promise.resolve() //clearCart(user)
         .then(() => {
             if (!sortedFunds.length) {
                 return Promise.resolve(true);
@@ -191,32 +176,30 @@ function autoBuyShares(
                         if (desiredSharesAmount <= currentSharesAmount) {
                             fundsAllocated.totalValue += desiredFundAllocation;
                             print.info(
-                                `Already have ${_numberRound(desiredSharesAmount)} shares ($${desiredFundAllocation.toFixed(2)}) for ${
-                                    fundExtended.fund.code
-                                } (${fundExtended.fund.name}), no more desired`
+                                `Already have ${_numberRound(desiredSharesAmount)} shares ($${desiredFundAllocation.toFixed(2)}) for ${fundExtended.fund.code} (${
+                                    fundExtended.fund.name
+                                }), no more desired`
                             );
                             return true;
                         }
 
                         if (currentSharesAmount) {
                             print.info(
-                                `Already have ${_numberRound(currentSharesAmount)} shares ($${currentSharesValue.toFixed(2)}) for ${
-                                    fundExtended.fund.code
-                                } (${fundExtended.fund.name}) but investing more...`
+                                `Already have ${_numberRound(currentSharesAmount)} shares ($${currentSharesValue.toFixed(2)}) for ${fundExtended.fund.code} (${
+                                    fundExtended.fund.name
+                                }) but investing more...`
                             );
                         }
 
                         fundsAllocated.totalValue += currentSharesValue;
 
-                        if (availableFundAllocation <= 0.01) {
-                            print.warning(
-                                `Cannot invest into ${fundExtended.fund.code} (${fundExtended.fund.name}) since wallet balance is 0`
-                            );
+                        if (isNaN(availableFundAllocation) || availableFundAllocation <= 0.01) {
+                            print.warning(`Cannot invest into ${fundExtended.fund.code} (${fundExtended.fund.name}) since wallet balance is 0`);
                             return true;
                         }
 
                         let fundAllocation = Math.min(availableFundAllocation, (desiredSharesAmount - currentSharesAmount) * sharePrice);
-                        if (fundAllocation < MIN_FUND_ALLOCATION) {
+                        if (isNaN(fundAllocation) || fundAllocation < MIN_FUND_ALLOCATION) {
                             print.warning(
                                 `Cannot invest $${fundAllocation.toFixed(2)} into ${fundExtended.fund.code} (${
                                     fundExtended.fund.name
@@ -230,18 +213,16 @@ function autoBuyShares(
 
                         fundsAllocated.totalValue += fundAllocation;
 
-                        print.action(
-                            `=> Auto investing ${_numberRound(sharesAmountToBuy)} shares ($${fundAllocation.toFixed(2)}) into ${
-                                fundExtended.fund.code
-                            } (${fundExtended.fund.name})`
-                        );
+                        print.action(`=> Auto investing ${_numberRound(sharesAmountToBuy)} shares ($${fundAllocation.toFixed(2)}) into ${fundExtended.fund.code} (${fundExtended.fund.name})`);
                         availableFundAllocation -= fundAllocation;
 
                         fundsAllocated.boughtNew = true;
-                        return addCartItem(user, fundExtended.fund, fundAllocation).then((data) => {
-                            print.errors(data);
-                            return true;
-                        });
+
+                        return true;
+                        // return addCartItem(user, fundExtended.fund, fundAllocation).then((data) => {
+                        //     print.errors(data);
+                        //     return true;
+                        // });
                     });
                 }, Promise.resolve(true));
         })
@@ -291,9 +272,7 @@ function autoSellShares(_user: User, sharesiesInfo: Info, sortedFunds: FundExten
                     return true;
                 }
 
-                let sellingShares = sharesiesInfo.orders
-                    .filter((order: Order) => order.fund_id === fundExtended.id)
-                    .reduce((sum, order) => sum + order.shares, 0);
+                let sellingShares = sharesiesInfo.orders.filter((order: Order) => order.fund_id === fundExtended.id).reduce((sum, order) => sum + order.shares, 0);
                 if (sellingShares > 0) {
                     return true;
                 }
@@ -310,11 +289,7 @@ function autoSellShares(_user: User, sharesiesInfo: Info, sortedFunds: FundExten
                 sharesAmount = Math.max(1, sharesValue / sharePrice);
                 sharesValue = sharesAmount * sharePrice;
 
-                print.action(
-                    `=> Consider selling ${_numberRound(sharesAmount)} shares ($${sharesValue.toFixed(2)}) for ${fundExtended.fund.code} (${
-                        fundExtended.fund.name
-                    })`
-                );
+                print.action(`=> Consider selling ${_numberRound(sharesAmount)} shares ($${sharesValue.toFixed(2)}) for ${fundExtended.fund.code} (${fundExtended.fund.name})`);
                 totalSoldValue += sharesValue;
                 return true;
 

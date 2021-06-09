@@ -1,17 +1,16 @@
-import { CartItem } from './models/cart-item';
-import { clearAll, cached } from '../_common/ts/cache/cache';
-import { curDateStamp, getDateStampRange } from '../_common/ts/system/date';
+import Promise from 'bluebird';
+import * as cache from '../_common/ts/cache/cache';
+import { cached, clearAll } from '../_common/ts/cache/cache';
+import * as request from '../_common/ts/network/request';
 import { forEachThen } from '../_common/ts/system/array';
-import { Fund } from './models/fund';
+import { curDateStamp, getDateStampRange } from '../_common/ts/system/date';
 import { getOrderedValues } from '../_common/ts/system/dict';
 import { leftPad, rightPad } from '../_common/ts/system/string';
-import { User } from './models/user';
-import * as cache from '../_common/ts/cache/cache';
-import * as request from '../_common/ts/network/request';
-
-import Promise from 'bluebird';
+import { CartItem } from './models/cart-item';
+import { Fund } from './models/fund';
 import { FundHistory } from './models/fund-history';
 import { FundInfo } from './models/fund-info';
+import { User } from './models/user';
 
 const cprint = require('color-print');
 
@@ -20,6 +19,7 @@ const cprint = require('color-print');
 // ******************************
 
 const MARKET_FEE_THRESHOLD = 3000;
+const REQUESTS_PAUSE = 50;
 
 // ******************************
 // Declarations:
@@ -208,6 +208,9 @@ export function getFundsCleaned() {
 
         return forEachThen(funds, (fund: Fund) => {
             let consistentDayPrices: { [key: string]: any } = {};
+            if (!fund.day_prices) {
+                throw new Error(`Day prices isn't set on fund ${fund.code}`);
+            }
             let dayPrices = fund.day_prices;
             let firstPrice = getOrderedValues(dayPrices, parseFloat)[0];
 
@@ -253,12 +256,16 @@ export function getFunds(): Promise<Fund[]> {
 // ******************************
 
 export function getHistoryForFund(in_fund: Fund): Promise<Fund> {
-    const promises = [];
-
     const now = new Date();
     const curYear = now.getFullYear();
     const curMonth = now.getMonth() + 1;
     const curDate = curDateStamp();
+    const results: Array<FundHistory> = [];
+    let requestObjects: Array<{
+        fund: Fund;
+        year: number;
+        month: number;
+    }> = [];
 
     const yearsAgo = 2;
     [...Array(yearsAgo)]
@@ -268,7 +275,11 @@ export function getHistoryForFund(in_fund: Fund): Promise<Fund> {
             [...Array(12)]
                 .map((_, idx) => idx + 1)
                 .forEach((month) => {
-                    promises.push(getHistoryForFundOnMonth(in_fund, year, month));
+                    requestObjects.push({
+                        fund: in_fund,
+                        year,
+                        month,
+                    });
                 });
         });
 
@@ -276,19 +287,29 @@ export function getHistoryForFund(in_fund: Fund): Promise<Fund> {
         [...Array(curMonth - 1)]
             .map((_, idx) => idx + 1)
             .forEach((month) => {
-                promises.push(getHistoryForFundOnMonth(in_fund, curYear, month));
+                requestObjects.push({
+                    fund: in_fund,
+                    year: curYear,
+                    month,
+                });
             });
     }
-    promises.push(getHistoryForFundOnCurrentMonth(in_fund, curYear, curMonth));
 
-    return Promise.all(promises).then((results) => {
-        const allDayPrices = results.reduce((allDayPrices: { [key: string]: string }, fund: FundHistory) => {
-            return Object.assign(allDayPrices, fund.day_prices);
-        }, {});
+    requestObjects.push({
+        fund: in_fund,
+        year: curYear,
+        month: curMonth,
+    });
 
+    return forEachThen(requestObjects, (requestObject: { fund: Fund; year: number; month: number }) => {
+        if (requestObject.year === curYear && requestObject.month === curMonth) {
+            return getHistoryForFundOnCurrentMonth(requestObject.fund, requestObject.year, requestObject.month).then((result) => results.push(result));
+        }
+        return getHistoryForFundOnMonth(requestObject.fund, requestObject.year, requestObject.month).then((result) => results.push(result));
+    }).then(() => {
+        const allDayPrices = results.reduce((allDayPrices: { [key: string]: string }, fund: FundHistory) => Object.assign(allDayPrices, fund.day_prices || {}), {});
         allDayPrices[curDate] = `${in_fund.market_price}`;
         in_fund.day_prices = allDayPrices;
-
         return in_fund;
     });
 }
@@ -308,10 +329,17 @@ export function getHistoryForFundOnMonth(in_fund: Fund, in_year: number, in_mont
 
     return cache.cached(
         () =>
-            request.get('fund/price-history', {
-                fund_id: in_fund.id,
-                first: firstDateStamp,
-                last: lastDateStamp,
+            new Promise((resolve) => {
+                console.log(`Requesting fund history for ${in_fund.name} at ${in_month}/${in_year}...`);
+                setTimeout(() => {
+                    return request
+                        .get('fund/price-history', {
+                            fund_id: in_fund.id,
+                            first: firstDateStamp,
+                            last: lastDateStamp,
+                        })
+                        .then((result) => resolve(result));
+                }, REQUESTS_PAUSE);
             }),
         `SHARESIES_FUND_HISTORY_${in_fund.id}_${firstDateStamp}_${lastDateStamp}`,
         -1
@@ -330,9 +358,16 @@ export function getHistoryForFundOnCurrentMonth(in_fund: Fund, in_year: number, 
 
     return cache.cached(
         () =>
-            request.get('fund/price-history', {
-                fund_id: in_fund.id,
-                first: firstDateStamp,
+            new Promise((resolve) => {
+                console.log(`Requesting fund history for ${in_fund.name} at current month...`);
+                setTimeout(() => {
+                    return request
+                        .get('fund/price-history', {
+                            fund_id: in_fund.id,
+                            first: firstDateStamp,
+                        })
+                        .then((result) => resolve(result));
+                }, REQUESTS_PAUSE);
             }),
         `SHARESIES_FUND_HISTORY_${in_fund.id}_${firstDateStamp}`,
         cache.H * 2
@@ -397,9 +432,7 @@ export function getFundInvestmentInfo(fund: Fund, marketPricesNormalized: number
     let currentNormalizedMarketPrice = marketPricesNormalized[marketPricesNormalized.length - 1];
     let currentPotentialPrice = currentNormalizedMarketPrice * priceRange + minPrice;
 
-    let marketVariability =
-        fundPricesNormalized.map((price, idx) => Math.abs(price - marketPricesNormalized[idx])).reduce((sum, price) => sum + price, 0) /
-        fundPricesNormalized.length;
+    let marketVariability = fundPricesNormalized.map((price, idx) => Math.abs(price - marketPricesNormalized[idx])).reduce((sum, price) => sum + price, 0) / fundPricesNormalized.length;
 
     let priceGainPotential = currentNormalizedMarketPrice - currentNormalizedPrice;
 
@@ -593,10 +626,7 @@ export function _getCartItems(user: User): Promise<{ items: CartItem[] }> {
 
 export function _handleErrors(fn: string, data: any, reject: Function) {
     if (data.errors) {
-        let errorsString = Object.keys(data.errors).reduce(
-            (str, key) => str + (str ? ', ' : '') + `(${key}: ${data.errors[key].join(', ')})`,
-            ''
-        );
+        let errorsString = Object.keys(data.errors).reduce((str, key) => str + (str ? ', ' : '') + `(${key}: ${data.errors[key].join(', ')})`, '');
 
         reject(`[${fn}] ${data.type}: ${errorsString}`);
         return true;

@@ -437,9 +437,9 @@ export function getFundInvestmentInfo(fund: Fund, marketPricesNormalized: number
     let priceGainPotential = currentNormalizedMarketPrice - currentNormalizedPrice;
 
     let score = 1;
-    score += priceGainPotential * 4.5; // Weight towards how much below the market line current price is
-    score -= marketVariability * 6; // Weight away how different line is to market line
-    score += growth * 2; // Weight towards positive growth over the last 20 price points
+    score += priceGainPotential * 5; // Weight towards how much below the market line current price is
+    score -= marketVariability * 8; // Weight away how different line is to market line
+    // score += growth * 2; // Weight towards positive growth over the last 20 price points
     // score += (priceDiff / 100); // Weight towards big price differences
 
     score *= 1.0;

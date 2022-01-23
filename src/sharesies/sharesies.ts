@@ -267,39 +267,23 @@ export function getHistoryForFund(in_fund: Fund): Promise<Fund> {
         month: number;
     }> = [];
 
-    const yearsAgo = 2;
-    [...Array(yearsAgo)]
-        .map((_, idx) => curYear - (idx + 1))
+    const monthsAgo = 13;
+    [...Array(monthsAgo)]
+        .map((_, idx) => idx)
         .reverse()
-        .forEach((year) => {
-            [...Array(12)]
-                .map((_, idx) => idx + 1)
-                .forEach((month) => {
-                    requestObjects.push({
-                        fund: in_fund,
-                        year,
-                        month,
-                    });
-                });
-        });
-
-    if (curMonth > 1) {
-        [...Array(curMonth - 1)]
-            .map((_, idx) => idx + 1)
-            .forEach((month) => {
-                requestObjects.push({
-                    fund: in_fund,
-                    year: curYear,
-                    month,
-                });
+        .forEach((minusMonth) => {
+            let year = curYear;
+            let month = curMonth - minusMonth;
+            while (month <= 0) {
+                year--;
+                month += 12;
+            }
+            requestObjects.push({
+                fund: in_fund,
+                year: year,
+                month: month,
             });
-    }
-
-    requestObjects.push({
-        fund: in_fund,
-        year: curYear,
-        month: curMonth,
-    });
+        });
 
     return forEachThen(requestObjects, (requestObject: { fund: Fund; year: number; month: number }) => {
         if (requestObject.year === curYear && requestObject.month === curMonth) {
